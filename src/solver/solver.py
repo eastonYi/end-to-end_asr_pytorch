@@ -82,11 +82,13 @@ class Solver(object):
                   format(epoch + 1, time.time() - start, tr_avg_loss))
             print('-' * 85)
 
+
             # Save model each epoch
             if epoch > 10:
                 file_path = os.path.join(
                     self.save_folder, 'epoch-%d.pth.tar' % (epoch + 1))
-                torch.save(self.model.serialize(self.model, self.optimizer, epoch + 1,
+                torch.save(self.model.serialize(self.model,
+                                                self.optimizer, epoch + 1,
                                                 self.LFR_m, self.LFR_n,
                                                 tr_loss=self.tr_loss,
                                                 cv_loss=self.cv_loss),
@@ -109,7 +111,8 @@ class Solver(object):
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 file_path = os.path.join(self.save_folder, self.model_path)
-                torch.save(self.model.serialize(self.model, self.optimizer, epoch + 1,
+                torch.save(self.model.serialize(self.model,
+                                                self.optimizer, epoch + 1,
                                                 self.LFR_m, self.LFR_n,
                                                 tr_loss=self.tr_loss,
                                                 cv_loss=self.cv_loss),
