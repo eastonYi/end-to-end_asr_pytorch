@@ -30,6 +30,7 @@ class Decoder(nn.Module):
         self.d_v = d_v
         self.d_model = d_model
         self.d_inner = d_inner
+        self.dim_output = n_tgt_vocab
         self.dropout = dropout
         self.tgt_emb_prj_weight_sharing = tgt_emb_prj_weight_sharing
         self.pe_maxlen = pe_maxlen
@@ -67,6 +68,7 @@ class Decoder(nn.Module):
         ys_in_pad = pad_list(ys_in, self.eos_id)
         ys_out_pad = pad_list(ys_out, IGNORE_ID)
         assert ys_in_pad.size() == ys_out_pad.size()
+        
         return ys_in_pad, ys_out_pad
 
     def forward(self, padded_input, encoder_padded_outputs,
@@ -120,6 +122,7 @@ class Decoder(nn.Module):
 
         if return_attns:
             return pred, gold, dec_slf_attn_list, dec_enc_attn_list
+
         return pred, gold
 
 

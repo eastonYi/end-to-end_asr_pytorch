@@ -6,7 +6,8 @@ import torch
 from data import AudioDataLoader, AudioDataset
 from decoder import Decoder
 from encoder import Encoder
-from transformer import Transformer
+# from transformer import Transformer
+from ctc_transformer import CTC_Transformer as Transformer
 from solver import Solver
 from utils import process_dict
 from optimizer import TransformerOptimizer
@@ -21,7 +22,7 @@ parser.add_argument('--train-json', type=str, default=None,
 parser.add_argument('--valid-json', type=str, default=None,
                     help='Filename of validation label data (json)')
 parser.add_argument('--dict', type=str, required=True,
-                    help='Dictionary which should include <unk> <sos> <eos>')
+                    help='Dictionary which should include <unk> <sos> <eos> <blk>')
 # Low Frame Rate (stacking and skipping frames)
 parser.add_argument('--LFR_m', default=4, type=int,
                     help='Low Frame Rate: number of frames to stack')

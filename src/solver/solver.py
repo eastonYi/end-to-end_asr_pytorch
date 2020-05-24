@@ -76,16 +76,16 @@ class Solver(object):
             self.model.train()  # Turn on BatchNorm & Dropout
             start = time.time()
             tr_avg_loss = self._run_one_epoch(epoch)
+
             print('-' * 85)
-            print('Train Summary | End of Epoch {0} | Time {1:.2f}s | '
-                  'Train Loss {2:.3f}'.format(
-                      epoch + 1, time.time() - start, tr_avg_loss))
+            print('Train Summary | End of Epoch {0} | Time {1:.2f}s | Train Loss {2:.3f}'.
+                  format(epoch + 1, time.time() - start, tr_avg_loss))
             print('-' * 85)
 
             # Save model each epoch
-            if self.checkpoint:
+            if epoch > 10:
                 file_path = os.path.join(
-                    self.save_folder, 'epoch%d.pth.tar' % (epoch + 1))
+                    self.save_folder, 'epoch-%d.pth.tar' % (epoch + 1))
                 torch.save(self.model.serialize(self.model, self.optimizer, epoch + 1,
                                                 self.LFR_m, self.LFR_n,
                                                 tr_loss=self.tr_loss,
@@ -156,8 +156,9 @@ class Solver(object):
             input_lengths = input_lengths.cuda()
             padded_target = padded_target.cuda()
             pred, gold = self.model(padded_input, input_lengths, padded_target)
-            loss, n_correct = cal_performance(pred, gold,
-                                              smoothing=self.label_smoothing)
+            ctc_loss, ce_loss, n_correct = cal_performance(
+                pred, gold, smoothing=self.label_smoothing)
+            loss = ctc_loss + ce_loss
             if not cross_valid:
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -168,10 +169,9 @@ class Solver(object):
             n_word = non_pad_mask.sum().item()
 
             if i % self.print_freq == 0:
-                print('Epoch {0} | Iter {1} | Average Loss {2:.3f} | '
-                      'Current Loss {3:.6f} | {4:.1f} ms/batch'.format(
-                          epoch + 1, i + 1, total_loss / (i + 1),
-                          loss.item(), 1000 * (time.time() - start) / (i + 1)),
+                print('Epoch {} | Iter {} | Current Loss {:.3f}|{:.3f} | {:.1f} ms/batch'.
+                      format(epoch + 1, i + 1, ctc_loss.item(), ce_loss.item(),
+                             1000 * (time.time() - start) / (i + 1)),
                       flush=True)
 
             # visualizing loss using visdom

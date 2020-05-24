@@ -19,7 +19,7 @@ Ad: Welcome to join Kwai Speech Team, make your career great! Send your resume t
 ### Quick start
 ```bash
 $ cd egs/aishell
-# Modify aishell data path to your path in the begining of run.sh 
+# Modify aishell data path to your path in the begining of run.sh
 $ bash run.sh
 ```
 That's all!
@@ -63,5 +63,8 @@ When happened in training, try to reduce `batch_size`. `$ bash run.sh --batch_si
 | Listen, Attend and Spell | 13.2 | See [Listen-Attend-Spell](https://github.com/kaituoxu/Listen-Attend-Spell)'s egs/aishell/run.sh |
 | SpeechTransformer | 12.8 | See egs/aishell/run.sh |
 
+| SPKR   | #Snt | #Wrd | Corr  |  Sub  |  Del  | Ins  |  Err | S.Err |
+| :---: | :-: | :----: |:----: |:----: |:----: |:----: |:----: |:----: |
+| Sum/Avg| 7176 | 104765 | 89.6  |  9.9  |  0.4  |  0.3  | 10.7 |  57.0 |
 ## Reference
 - [1] Yuanyuan Zhao, Jie Li, Xiaorui Wang, and Yan Li. "The SpeechTransformer for Large-scale Mandarin Chinese Speech Recognition." ICASSP 2019.
