@@ -1,5 +1,4 @@
 import argparse
-
 import torch
 
 from encoder import Encoder

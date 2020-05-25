@@ -11,8 +11,12 @@ def main(dir_model, num):
                 files.append(os.path.join(r, file))
 
     files.sort()
+    files2avg = files[-num:]
+    files2rm = files[:-num]
+    [os.remove(i) for i in files2rm]
+
     avg = None
-    for path in files[-num:]:
+    for path in files2avg:
         print('load model', path)
         states = torch.load(path, map_location=torch.device("cpu"))
         if avg is None:

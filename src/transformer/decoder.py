@@ -68,7 +68,7 @@ class Decoder(nn.Module):
         ys_in_pad = pad_list(ys_in, self.eos_id)
         ys_out_pad = pad_list(ys_out, IGNORE_ID)
         assert ys_in_pad.size() == ys_out_pad.size()
-        
+
         return ys_in_pad, ys_out_pad
 
     def forward(self, padded_input, encoder_padded_outputs,
@@ -125,6 +125,26 @@ class Decoder(nn.Module):
 
         return pred, gold
 
+    def step_forward(self, ys, encoder_outputs):
+        # -- Prepare masks
+        non_pad_mask = torch.ones_like(ys).float().unsqueeze(-1) # 1xix1
+        slf_attn_mask = get_subsequent_mask(ys)
+
+        # -- Forward
+        dec_output = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+
+        for dec_layer in self.layer_stack:
+            dec_output, _, _ = dec_layer(
+                dec_output, encoder_outputs,
+                non_pad_mask=non_pad_mask,
+                slf_attn_mask=slf_attn_mask,
+                dec_enc_attn_mask=None)
+
+        seq_logit = self.tgt_word_prj(dec_output[:, -1])
+
+        local_scores = F.log_softmax(seq_logit, dim=1)
+
+        return local_scores
 
     def recognize_beam(self, encoder_outputs, char_list, args):
         """Beam search, decode one utterence now.
@@ -142,7 +162,7 @@ class Decoder(nn.Module):
         if args.decode_max_len == 0:
             maxlen = encoder_outputs.size(0)
         else:
-            maxlen = args.decode_max_len
+            maxlen =  min(args.decode_max_len, encoder_outputs.size(0))
 
         encoder_outputs = encoder_outputs.unsqueeze(0)
 
@@ -159,25 +179,8 @@ class Decoder(nn.Module):
             for hyp in hyps:
                 ys = hyp['yseq']  # 1 x i
 
-                # -- Prepare masks
-                non_pad_mask = torch.ones_like(ys).float().unsqueeze(-1) # 1xix1
-                slf_attn_mask = get_subsequent_mask(ys)
+                local_scores = self.step_forward(ys, encoder_outputs)
 
-                # -- Forward
-                dec_output = self.dropout(
-                    self.tgt_word_emb(ys) * self.x_logit_scale +
-                    self.positional_encoding(ys))
-
-                for dec_layer in self.layer_stack:
-                    dec_output, _, _ = dec_layer(
-                        dec_output, encoder_outputs,
-                        non_pad_mask=non_pad_mask,
-                        slf_attn_mask=slf_attn_mask,
-                        dec_enc_attn_mask=None)
-
-                seq_logit = self.tgt_word_prj(dec_output[:, -1])
-
-                local_scores = F.log_softmax(seq_logit, dim=1)
                 # topk scores
                 local_best_scores, local_best_ids = torch.topk(
                     local_scores, beam, dim=1)
@@ -191,6 +194,90 @@ class Decoder(nn.Module):
                     # will be (2 x beam) hyps at most
                     hyps_best_kept.append(new_hyp)
 
+            hyps = sorted(hyps_best_kept,
+                          key=lambda x: x['score'],
+                          reverse=True)[:beam]
+
+            # add eos in the final loop to avoid that there are no ended hyps
+            if i == maxlen - 1:
+                for hyp in hyps:
+                    hyp['yseq'] = torch.cat([hyp['yseq'],
+                                             torch.ones(1, 1).fill_(self.eos_id).type_as(encoder_outputs).long()], dim=1)
+
+            # add ended hypothes to a final list, and removed them from current hypothes
+            # (this will be a probmlem, number of hyps < beam)
+            remained_hyps = []
+            for hyp in hyps:
+                if hyp['yseq'][0, -1] == self.eos_id:
+                    ended_hyps.append(hyp)
+                else:
+                    remained_hyps.append(hyp)
+
+            hyps = remained_hyps
+            if len(hyps) > 0:
+                print('remeined hypothes: ' + str(len(hyps)))
+            else:
+                print('no hypothesis. Finish decoding.')
+                break
+
+            for hyp in hyps:
+                print('hypo: ' + ''.join([char_list[int(x)]
+                                          for x in hyp['yseq'][0, 1:]]))
+        # end for i in range(maxlen)
+        nbest_hyps = sorted(ended_hyps, key=lambda x: x['score'], reverse=True)[
+            :min(len(ended_hyps), nbest)]
+        # compitable with LAS implementation
+        for hyp in nbest_hyps:
+            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+            
+        return nbest_hyps
+
+    def recognize_batch_beam(self, encoder_outputs, char_list, args):
+        """Batch Beam search.
+        Args:
+            encoder_outputs: B x T x H
+            char_list: list of character
+            args: args.beam
+
+        Returns:
+            nbest_hyps:
+        """
+        # search params
+        beam = args.beam_size
+        batch_size = encoder_outputs.shape[0]
+        nbest = args.nbest
+        if args.decode_max_len == 0:
+            maxlen = encoder_outputs.size(0)
+        else:
+            maxlen = args.decode_max_len
+
+        # prepare sos
+        ys = torch.ones(batch_size, 1).fill_(self.sos_id).type_as(encoder_outputs).long()
+
+        # yseq: 1 x T
+        hyp = {'score': 0.0, 'yseq': ys}
+        hyps = [hyp]
+        ended_hyps = []
+
+        for i in range(maxlen):
+            hyps_best_kept = []
+            for hyp in hyps:
+                ys = hyp['yseq']  # 1 x i
+
+                local_scores = self.step_forward(ys, encoder_outputs)
+
+                # topk scores
+                local_best_scores, local_best_ids = torch.topk(
+                    local_scores, beam, dim=1)
+
+                for j in range(beam):
+                    new_hyp = {}
+                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
+                    new_hyp['yseq'] = torch.ones(1, (1+ys.size(1))).type_as(encoder_outputs).long()
+                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
+                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
+                    # will be (2 x beam) hyps at most
+                    hyps_best_kept.append(new_hyp)
 
                 hyps_best_kept = sorted(hyps_best_kept,
                                         key=lambda x: x['score'],
