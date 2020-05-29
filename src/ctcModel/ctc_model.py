@@ -32,19 +32,18 @@ class CTC_Model(nn.Module):
 
         return logits, len_logits
 
-    def recognize(self, input, input_length, ctc_infer, char_list, args):
+    def recognize(self, input, input_length, ctc_infer, args):
         """Sequence-to-Sequence beam search, decode one utterence now.
         Args:
             input: T x D
             decode: GreedyDecoder or BeamDecoder
-            char_list: list of characters
             args: args.beam
         Returns:
             nbest_hyps:
         """
         encoder_outputs, *_ = self.encoder(input.unsqueeze(0), input_length)
         logits, len_logits = self.decoder(encoder_outputs, input_length)
-        
+
         nbest_hyps = ctc_infer(logits, len_logits)
 
         return nbest_hyps

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from collections import defaultdict
+
 IGNORE_ID = -1
 
 
@@ -20,7 +22,31 @@ def process_dict(dict_path):
                  for entry in dictionary]
     sos_id = char_list.index('<sos>')
     eos_id = char_list.index('<eos>')
+
     return char_list, sos_id, eos_id
+
+
+def load_vocab(path, vocab_size=None):
+    with open(path, encoding='utf8') as f:
+        vocab = [line.strip().split()[0] for line in f]
+    vocab = vocab[:vocab_size] if vocab_size else vocab
+    id_unk = vocab.index('<unk>')
+    token2idx = defaultdict(lambda: id_unk)
+    idx2token = defaultdict(lambda: '<unk>')
+    token2idx.update({token: idx for idx, token in enumerate(vocab)})
+    idx2token.update({idx: token for idx, token in enumerate(vocab)})
+    if '<space>' in vocab:
+        idx2token[token2idx['<space>']] = ' '
+    if '<blk>' in vocab:
+        idx2token[token2idx['<blk>']] = ''
+    # if '<pad>' in vocab:
+    #     idx2token[token2idx['<pad>']] = ''
+    if '<unk>' in vocab:
+        idx2token[token2idx['<unk>']] = '<UNK>'
+
+    assert len(token2idx) == len(idx2token)
+
+    return token2idx, idx2token
 
 
 if __name__ == "__main__":
@@ -70,6 +96,17 @@ def parse_hypothesis(hyp, char_list):
     text = "".join(token_as_list).replace('<space>', ' ')
 
     return text, token, tokenid, score
+
+
+def ids2str(hyps_ints, idx2token):
+    list_res = []
+    hyp = ''
+    for hyp_ints, length in zip(*hyps_ints):
+        for idx in hyp_ints[:length]:
+            hyp += idx2token[idx]
+        list_res.append(hyp)
+
+    return list_res
 
 
 def add_results_to_json(js, nbest_hyps, char_list):
@@ -122,7 +159,7 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.float):
         maxlen = lengths.max()
     mask = torch.ones((len(lengths), maxlen.item()),
                       device=lengths.device,
-                      dtype=lengths.type).cumsum(dim=1) <= lengths.unsqueeze(0).t()
+                      dtype=torch.uint8).cumsum(dim=1) <= lengths.unsqueeze(0).t()
 
     return mask.type(dtype)
 

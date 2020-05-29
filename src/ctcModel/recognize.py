@@ -6,7 +6,7 @@ import torch
 import kaldi_io
 
 from ctcModel.ctc_model import CTC_Model
-from utils.utils import add_results_to_json, process_dict
+from utils.utils import load_vocab, ids2str
 from data.data import build_LFR_features
 
 parser = argparse.ArgumentParser(
@@ -16,7 +16,7 @@ parser.add_argument('--recog-json', type=str, required=True,
                     help='Filename of recognition data (json)')
 parser.add_argument('--dict', type=str, required=True,
                     help='Dictionary which should include <unk> <sos> <eos>')
-parser.add_argument('--result-label', type=str, required=True,
+parser.add_argument('--output', type=str, required=True,
                     help='Filename of result label data (json)')
 # model
 parser.add_argument('--model-path', type=str, required=True,
@@ -39,25 +39,24 @@ def recognize(args):
     print(model)
     model.eval()
     model.cuda()
-    char_list, *_ = process_dict(args.dict)
-    blank_index = len(char_list) - 1
+    token2idx, idx2token = load_vocab(args.dict)
+    blank_index = token2idx['<blk>']
 
     if args.beam_size == 1:
         from ctcModel.ctc_infer import GreedyDecoder
 
-        decode = GreedyDecoder(char_list, space_idx=0, blank_index=blank_index)
+        decode = GreedyDecoder(space_idx=0, blank_index=blank_index)
     else:
         from ctcModel.ctc_infer import BeamDecoder
-        
-        decode = BeamDecoder(char_list, beam_width=args.beam_size, blank_index=blank_index, space_idx=0)
+
+        decode = BeamDecoder(beam_width=args.beam_size, blank_index=blank_index, space_idx=0)
 
     # read json data
     with open(args.recog_json, 'rb') as f:
         js = json.load(f)['utts']
 
     # decode each utterance
-    new_js = {}
-    with torch.no_grad():
+    with torch.no_grad(), open(args.output, 'w') as f:
         for idx, name in enumerate(js.keys(), 1):
             print('(%d/%d) decoding %s' %
                   (idx, len(js.keys()), name), flush=True)
@@ -67,12 +66,9 @@ def recognize(args):
             input_length = torch.tensor([input.size(0)], dtype=torch.int)
             input = input.cuda()
             input_length = input_length.cuda()
-            nbest_hyps = model.recognize(input, input_length, decode, char_list, args)
-            new_js[name] = add_results_to_json(js[name], nbest_hyps, char_list)
-
-    with open(args.result_label, 'wb') as f:
-        f.write(json.dumps({'utts': new_js}, indent=4,
-                           sort_keys=True).encode('utf_8'))
+            hyps_ints = model.recognize(input, input_length, decode, args)
+            hyp = ids2str(hyps_ints, idx2token)[0]
+            f.write(name + ' ' + hyp + '\n')
 
 
 if __name__ == "__main__":
