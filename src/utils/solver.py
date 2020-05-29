@@ -49,7 +49,7 @@ class Solver(object):
     def _reset(self):
         # Reset
         if self._continue:
-            last_model_path = os.path.join(self.exps, 'last.model')
+            last_model_path = os.path.join(self.save_folder, 'last.model')
             print('Loading checkpoint model {}'.format())
             last_model = torch.load(last_model_path)
             self.model.load_state_dict(last_model['state_dict'])

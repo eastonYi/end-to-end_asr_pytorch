@@ -1,8 +1,8 @@
 import torch.nn as nn
 
-from attention import MultiHeadAttention
-from module import PositionalEncoding, PositionwiseFeedForward
-from utils import get_non_pad_mask, get_attn_pad_mask
+from transformer.attention import MultiHeadAttention
+from transformer.module import PositionalEncoding, PositionwiseFeedForward
+from utils.utils import get_non_pad_mask, get_attn_pad_mask
 
 
 class Encoder(nn.Module):
@@ -11,7 +11,7 @@ class Encoder(nn.Module):
 
     def __init__(self, d_input, n_layers, n_head, d_k, d_v,
                  d_model, d_inner, dropout=0.1, pe_maxlen=5000):
-        super(Encoder, self).__init__()
+        super().__init__()
         # parameters
         self.d_input = d_input
         self.n_layers = n_layers

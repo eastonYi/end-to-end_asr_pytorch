@@ -2,13 +2,13 @@
 SRC_ROOT=$PWD/../../src
 export PYTHONPATH=$SRC_ROOT:$PYTHONPATH
 
-gpu_id=1
+gpu_id=0
 stage='train'
 
-model_src=$SRC_ROOT/ctcModel
+model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
-vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
-expdir=exp/ctc # tag for managing experiments.
+dict=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
+expdir=exp/transformer # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 
 # Training config
@@ -63,7 +63,7 @@ if [ $stage = 'train' ];then
     CUDA_VISIBLE_DEVICES=${gpu_id} python $model_src/train.py \
             --train-json ${feat_train_dir}/data.json \
             --valid-json ${feat_dev_dir}/data.json \
-            --vocab ${vocab} \
+            --dict ${dict} \
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
             --d_input $d_input \
@@ -98,7 +98,7 @@ if [ $stage = 'test' ];then
             --recog-json ${feat_test_dir}/data.json \
             --dict $dict \
             --output ${decode_dir}/hyp \
-            --model-path $continue_from \
+            --model-path $continue \
             --beam-size $beam_size \
             --nbest $nbest \
             --decode-max-len $decode_max_len

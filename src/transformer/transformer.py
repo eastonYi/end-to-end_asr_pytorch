@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from decoder import Decoder
-from encoder import Encoder
+from .decoder import Decoder
+from .encoder import Encoder
 
 
 class Transformer(nn.Module):
@@ -10,7 +10,7 @@ class Transformer(nn.Module):
     """
 
     def __init__(self, encoder, decoder):
-        super(Transformer, self).__init__()
+        super().__init__()
         self.encoder = encoder
         self.decoder = decoder
 

@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from attention import MultiHeadAttention
-from module import PositionalEncoding, PositionwiseFeedForward
-from utils import get_attn_key_pad_mask, get_attn_pad_mask, \
+from transformer.attention import MultiHeadAttention
+from transformer.module import PositionalEncoding, PositionwiseFeedForward
+from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, \
                 get_non_pad_mask, get_subsequent_mask, pad_list
 
 
@@ -18,7 +18,7 @@ class Decoder(nn.Module):
             d_model, d_inner, dropout=0.1,
             tgt_emb_prj_weight_sharing=True,
             pe_maxlen=5000):
-        super(Decoder, self).__init__()
+        super().__init__()
         # parameters
         self.sos_id = sos_id  # Start of Sentence
         self.eos_id = eos_id  # End of Sentence
