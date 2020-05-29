@@ -3,7 +3,7 @@ Logic:
 1. AudioDataLoader generate a minibatch from AudioDataset, the size of this
    minibatch is AudioDataLoader's batchsize. For now, we always set
    AudioDataLoader's batchsize as 1. The real minibatch size we care about is
-   set in AudioDataset's __init__(...). So actually, we generate the 
+   set in AudioDataset's __init__(...). So actually, we generate the
    information of one minibatch in AudioDataset.
 2. After AudioDataLoader getting one minibatch from AudioDataset,
    AudioDataLoader calls its collate_fn(batch) to process this minibatch.
@@ -32,7 +32,7 @@ class AudioDataset(data.Dataset):
             data: espnet/espnet json format file.
             num_batches: for debug. only use num_batches minibatch but not all.
         """
-        super(AudioDataset, self).__init__()
+        super().__init__()
         with open(data_json_path, 'rb') as f:
             data = json.load(f)['utts']
         # sort it by input lengths (long to short)

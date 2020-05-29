@@ -82,7 +82,6 @@ class Solver(object):
                   format(epoch + 1, time.time() - start, tr_avg_loss))
             print('-' * 85)
 
-
             # Save model each epoch
             if epoch > 10:
                 file_path = os.path.join(

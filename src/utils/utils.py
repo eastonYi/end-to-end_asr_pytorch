@@ -9,6 +9,7 @@ def pad_list(xs, pad_value):
     pad = xs[0].new(n_batch, max_len, * xs[0].size()[1:]).fill_(pad_value)
     for i in range(n_batch):
         pad[i, :xs[i].size(0)] = xs[i]
+
     return pad
 
 
@@ -29,6 +30,24 @@ if __name__ == "__main__":
     print(char_list, sos_id, eos_id)
 
 # * ------------------ recognition related ------------------ *
+def parse_ctc_hypothesis(hyp, char_list):
+    """Function to parse hypothesis
+
+    :param list hyp: recognition hypothesis
+    :param list char_list: list of characters
+    :return: recognition text strinig
+    :return: recognition token strinig
+    :return: recognition tokenid string
+    """
+    tokenid_as_list = list(map(int, hyp))
+    token_as_list = [char_list[idx] for idx in tokenid_as_list]
+
+    # convert to string
+    tokenid = " ".join([str(idx) for idx in tokenid_as_list])
+    token = " ".join(token_as_list)
+    text = "".join(token_as_list).replace('<space>', ' ')
+
+    return text, token, tokenid, 0.0
 
 
 def parse_hypothesis(hyp, char_list):
@@ -96,6 +115,17 @@ def add_results_to_json(js, nbest_hyps, char_list):
 
 # -- Transformer Related --
 import torch
+
+
+def sequence_mask(lengths, maxlen=None, dtype=torch.float):
+    if maxlen is None:
+        maxlen = lengths.max()
+    mask = torch.ones((len(lengths), maxlen.item()),
+                      device=lengths.device,
+                      dtype=lengths.type).cumsum(dim=1) <= lengths.unsqueeze(0).t()
+
+    return mask.type(dtype)
+
 
 def get_non_pad_mask(padded_input, input_lengths=None, pad_idx=None):
     """padding position is set to 0, either use input_lengths or pad_idx
