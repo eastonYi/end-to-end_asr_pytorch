@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 from attention import MultiHeadAttention
 from module import PositionalEncoding, PositionwiseFeedForward
-from utils import (IGNORE_ID, get_attn_key_pad_mask, get_attn_pad_mask,
-                   get_non_pad_mask, get_subsequent_mask, pad_list)
+from utils import get_attn_key_pad_mask, get_attn_pad_mask, \
+                get_non_pad_mask, get_subsequent_mask, pad_list
 
 
 class Decoder(nn.Module):
@@ -57,7 +57,7 @@ class Decoder(nn.Module):
         """Generate decoder input and output label from padded_input
         Add <sos> to decoder input, and add <eos> to decoder output label
         """
-        ys = [y[y != IGNORE_ID] for y in padded_input]  # parse padded ys
+        ys = [y[y != 0] for y in padded_input]  # parse padded ys
         # prepare input and output word sequences with sos/eos IDs
         eos = ys[0].new([self.eos_id])
         sos = ys[0].new([self.sos_id])
@@ -66,7 +66,7 @@ class Decoder(nn.Module):
         # padding for ys with -1
         # pys: utt x olen
         ys_in_pad = pad_list(ys_in, self.eos_id)
-        ys_out_pad = pad_list(ys_out, IGNORE_ID)
+        ys_out_pad = pad_list(ys_out, 0)
         assert ys_in_pad.size() == ys_out_pad.size()
 
         return ys_in_pad, ys_out_pad
@@ -229,7 +229,7 @@ class Decoder(nn.Module):
         # compitable with LAS implementation
         for hyp in nbest_hyps:
             hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
-            
+
         return nbest_hyps
 
     def recognize_batch_beam(self, encoder_outputs, char_list, args):

@@ -2,13 +2,13 @@
 import argparse
 import torch
 
-from data.data import AudioDataLoader, AudioDataset
+from utils.data import AudioDataLoader, AudioDataset
+from utils.utils import load_vocab
 from ctcModel.decoder import Decoder
 from ctcModel.encoder import Encoder
 from ctcModel.ctc_model import CTC_Model
 from ctcModel.optimizer import CTCModelOptimizer
-from ctcModel.solver import Solver
-from utils.utils import process_dict
+from ctcModel.solver import CTC_Solver
 
 parser = argparse.ArgumentParser(
     "End-to-End Automatic Speech Recognition Training "
@@ -19,7 +19,7 @@ parser.add_argument('--train-json', type=str, default=None,
                     help='Filename of train label data (json)')
 parser.add_argument('--valid-json', type=str, default=None,
                     help='Filename of validation label data (json)')
-parser.add_argument('--dict', type=str, required=True,
+parser.add_argument('--vocab', type=str, required=True,
                     help='Dictionary which should include <unk> <sos> <eos> <blk>')
 # Low Frame Rate (stacking and skipping frames)
 parser.add_argument('--LFR_m', default=4, type=int,
@@ -84,12 +84,12 @@ parser.add_argument('--save-folder', default='exp/temp',
                     help='Location to save epoch models')
 parser.add_argument('--checkpoint', dest='checkpoint', default=0, type=int,
                     help='Enables checkpoint saving of model')
-parser.add_argument('--continue-from', default='',
+parser.add_argument('--_continue', default='', type=int,
                     help='Continue from checkpoint model')
-parser.add_argument('--model-path', default='final.pth.tar',
+parser.add_argument('--model-path', default='final.model',
                     help='Location to save best validation model')
 # logging
-parser.add_argument('--print-freq', default=10, type=int,
+parser.add_argument('--print-freq', default=100, type=int,
                     help='Frequency of printing training infomation')
 parser.add_argument('--visdom', dest='visdom', type=int, default=0,
                     help='Turn on visdom graphing')
@@ -118,8 +118,8 @@ def main(args):
                                 num_workers=args.num_workers,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     # load dictionary and generate char_list, sos_id, eos_id
-    char_list, *_ = process_dict(args.dict)
-    vocab_size = len(char_list)
+    token2idx, idx2token = load_vocab(args.vocab)
+    vocab_size = len(token2idx)
     data = {'tr_loader': tr_loader, 'cv_loader': cv_loader}
     # model
     encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
@@ -135,7 +135,7 @@ def main(args):
         args.warmup_steps)
 
     # solver
-    solver = Solver(data, model, optimizier, args)
+    solver = CTC_Solver(data, model, optimizier, args)
     solver.train()
 
 

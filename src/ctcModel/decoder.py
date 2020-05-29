@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from utils.utils import IGNORE_ID, sequence_mask, get_subsequent_mask, pad_list
+from utils.utils import sequence_mask
 
 
 class Decoder(nn.Module):

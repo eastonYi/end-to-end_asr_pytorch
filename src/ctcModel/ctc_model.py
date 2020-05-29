@@ -27,8 +27,7 @@ class CTC_Model(nn.Module):
         """
         encoder_padded_outputs, *_ = self.encoder(padded_input, input_lengths)
         # pred is score before softmax
-        logits = self.decoder(encoder_padded_outputs, input_lengths)
-        len_logits = input_lengths
+        logits, len_logits = self.decoder(encoder_padded_outputs, input_lengths)
 
         return logits, len_logits
 

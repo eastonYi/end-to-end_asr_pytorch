@@ -9,13 +9,12 @@ Logic:
    AudioDataLoader calls its collate_fn(batch) to process this minibatch.
 """
 import json
-
 import numpy as np
 import torch
 import torch.utils.data as data
-
 import kaldi_io
-from utils import IGNORE_ID, pad_list
+
+from utils.utils import pad_list
 
 
 class AudioDataset(data.Dataset):
@@ -134,7 +133,8 @@ def _collate_fn(batch, LFR_m=1, LFR_n=1):
     # perform padding and convert to tensor
     xs_pad = pad_list([torch.from_numpy(x).float() for x in xs], 0)
     ilens = torch.from_numpy(ilens)
-    ys_pad = pad_list([torch.from_numpy(y).long() for y in ys], IGNORE_ID)
+    ys_pad = pad_list([torch.from_numpy(y).long() for y in ys], 0)
+
     return xs_pad, ilens, ys_pad
 
 

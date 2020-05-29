@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 from collections import defaultdict
 
-IGNORE_ID = -1
-
 
 def pad_list(xs, pad_value):
     # From: espnet/src/nets/e2e_asr_th.py: pad_list()
