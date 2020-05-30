@@ -5,10 +5,11 @@ export PYTHONPATH=$SRC_ROOT:$PYTHONPATH
 gpu_id=0
 stage='train'
 
+structure='transformer-ctc'
 model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
 vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
-expdir=exp/transformer # tag for managing experiments.
+expdir=exp/transformer-ctc # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 
 # Training config
@@ -64,6 +65,7 @@ if [ $stage = 'train' ];then
             --train-json ${feat_train_dir}/data.json \
             --valid-json ${feat_dev_dir}/data.json \
             --vocab ${vocab} \
+            --structure ${structure} \
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
             --d_input $d_input \

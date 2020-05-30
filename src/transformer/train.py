@@ -133,12 +133,12 @@ def main(args):
     elif args.structure == 'transformer-ctc':
         from transformer.decoder import Decoder
         from transformer.encoder import Encoder
-        from transformer.ctc_transformer import CTC_Transformer as Transformer
+        from transformer.Transformer import CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
     elif args.structure == 'conv-transformer-ctc':
         from transformer.decoder import Decoder
         from transformer.encoder import Conv_Encoder as Encoder
-        from transformer.ctc_transformer import CTC_Transformer as Transformer
+        from transformer.Transformer import CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
 
     # model
