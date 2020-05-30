@@ -95,23 +95,24 @@ class AudioDataLoader(data.DataLoader):
     NOTE: just use batchsize=1 here, so drop_last=True makes no sense here.
     """
 
-    def __init__(self, *args, LFR_m=1, LFR_n=1, **kwargs):
-        super(AudioDataLoader, self).__init__(*args, **kwargs)
-        self.collate_fn = LFRCollate(LFR_m=LFR_m, LFR_n=LFR_n)
+    def __init__(self, token2idx, *args, LFR_m=1, LFR_n=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.collate_fn = LFRCollate(token2idx, LFR_m=LFR_m, LFR_n=LFR_n)
 
 
 class LFRCollate(object):
     """Build this wrapper to pass arguments(LFR_m, LFR_n) to _collate_fn"""
-    def __init__(self, LFR_m=1, LFR_n=1):
+    def __init__(self, token2idx, LFR_m=1, LFR_n=1):
+        self.token2idx = token2idx
         self.LFR_m = LFR_m
         self.LFR_n = LFR_n
 
     def __call__(self, batch):
-        return _collate_fn(batch, LFR_m=self.LFR_m, LFR_n=self.LFR_n)
+        return _collate_fn(batch, self.token2idx, LFR_m=self.LFR_m, LFR_n=self.LFR_n)
 
 
 # From: espnet/src/asr/asr_pytorch.py: CustomConverter:__call__
-def _collate_fn(batch, LFR_m=1, LFR_n=1):
+def _collate_fn(batch, token2idx, LFR_m=1, LFR_n=1):
     """
     Args:
         batch: list, len(batch) = 1. See AudioDataset.__getitem__()
@@ -122,7 +123,7 @@ def _collate_fn(batch, LFR_m=1, LFR_n=1):
     """
     # batch should be located in list
     assert len(batch) == 1
-    batch = load_inputs_and_targets(batch[0], LFR_m=LFR_m, LFR_n=LFR_n)
+    batch = load_inputs_and_targets(batch[0], token2idx, LFR_m=LFR_m, LFR_n=LFR_n)
     xs, ys = batch
 
     # TODO: perform subsamping
@@ -139,13 +140,13 @@ def _collate_fn(batch, LFR_m=1, LFR_n=1):
 
 
 # ------------------------------ utils ------------------------------------
-def load_inputs_and_targets(batch, LFR_m=1, LFR_n=1):
+def load_inputs_and_targets(batch, token2idx, LFR_m=1, LFR_n=1):
     # From: espnet/src/asr/asr_utils.py: load_inputs_and_targets
     # load acoustic features and target sequence of token ids
     # for b in batch:
     #     print(b[1]['input'][0]['feat'])
     xs = [kaldi_io.read_mat(b[1]['input'][0]['feat']) for b in batch]
-    ys = [b[1]['output'][0]['tokenid'].split() for b in batch]
+    ys = [b[1]['output'][0]['token'].split() for b in batch]
 
     if LFR_m != 1 or LFR_n != 1:
         # xs = build_LFR_features(xs, LFR_m, LFR_n)
@@ -156,11 +157,11 @@ def load_inputs_and_targets(batch, LFR_m=1, LFR_n=1):
     # sort in input lengths
     nonzero_sorted_idx = sorted(nonzero_idx, key=lambda i: -len(xs[i]))
     if len(nonzero_sorted_idx) != len(xs):
-        print("warning: Target sequences include empty tokenid")
+        print("warning: Target sequences include empty token")
 
     # remove zero-lenght samples
     xs = [xs[i] for i in nonzero_sorted_idx]
-    ys = [np.fromiter(map(int, ys[i]), dtype=np.int64)
+    ys = [np.fromiter(map(token2idx, map(int, ys[i])), dtype=np.int64)
           for i in nonzero_sorted_idx]
 
     return xs, ys

@@ -93,7 +93,6 @@ class Decoder(nn.Module):
                                                      seq_q=ys_in_pad,
                                                      pad_idx=self.eos_id)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
-
         output_length = ys_in_pad.size(1)
         dec_enc_attn_mask = get_attn_pad_mask(encoder_padded_outputs,
                                               encoder_input_lengths,

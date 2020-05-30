@@ -3,7 +3,7 @@ import argparse
 import torch
 
 from utils.data import AudioDataLoader, AudioDataset
-from utils.utils import process_dict
+from utils.utils import load_vocab
 from transformer.optimizer import TransformerOptimizer
 
 
@@ -16,7 +16,7 @@ parser.add_argument('--train-json', type=str, default=None,
                     help='Filename of train label data (json)')
 parser.add_argument('--valid-json', type=str, default=None,
                     help='Filename of validation label data (json)')
-parser.add_argument('--dict', type=str, required=True,
+parser.add_argument('--vocab', type=str, required=True,
                     help='Dictionary which should include <unk> <sos> <eos>')
 # Low Frame Rate (stacking and skipping frames)
 parser.add_argument('--LFR_m', default=4, type=int,
@@ -103,6 +103,12 @@ parser.add_argument('--visdom-id', default='Transformer training',
 def main(args):
     # Construct Solver
     # data
+    # char_list, sos_id, eos_id = process_dict(args.dict)
+    token2idx, idx2token = load_vocab(args.vocab)
+    vocab_size = len(token2idx)
+    sos_id = token2idx['<sos>']
+    eos_id = token2idx['<eos>']
+
     tr_dataset = AudioDataset(args.train_json, args.batch_size,
                               args.maxlen_in, args.maxlen_out,
                               batch_frames=args.batch_frames)
@@ -117,8 +123,6 @@ def main(args):
                                 num_workers=args.num_workers,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     # load dictionary and generate char_list, sos_id, eos_id
-    char_list, sos_id, eos_id = process_dict(args.dict)
-    vocab_size = len(char_list)
     data = {'tr_loader': tr_loader, 'cv_loader': cv_loader}
 
     if args.structure == 'transformer':

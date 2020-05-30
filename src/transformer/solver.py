@@ -37,8 +37,8 @@ class Transformer_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | Current Loss {:.3f} | {:.1f} ms/batch'.
-                      format(epoch + 1, i + 1, ce_loss.item(),
+                print('Epoch {} | Iter {} | Current Loss {:.3f} | lr {:.3e} | {:.1f} ms/batch'.
+                      format(epoch + 1, i + 1, ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
                              1000 * (time.time() - start) / (i + 1)),
                       flush=True)
 

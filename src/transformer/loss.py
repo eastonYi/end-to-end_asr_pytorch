@@ -5,6 +5,7 @@ import torch.nn.functional as F
 def cal_ce_loss(pred, gold, smoothing=0.0):
     """Calculate cross entropy loss, apply label smoothing if needed.
     """
+    
     pred = pred.view(-1, pred.size(2))
     gold = gold.contiguous().view(-1)
     if smoothing > 0.0:
@@ -26,7 +27,7 @@ def cal_ce_loss(pred, gold, smoothing=0.0):
     else:
         ce_loss = F.cross_entropy(pred, gold,
                                   ignore_index=0,
-                                  reduction='elementwise_mean')
+                                  reduction='mean')
 
     return ce_loss
 

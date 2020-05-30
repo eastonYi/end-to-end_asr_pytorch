@@ -50,7 +50,7 @@ class Solver(object):
         # Reset
         if self._continue:
             last_model_path = os.path.join(self.save_folder, 'last.model')
-            print('Loading checkpoint model {}'.format())
+            print('Loading checkpoint model {}'.format(last_model_path))
             last_model = torch.load(last_model_path)
             self.model.load_state_dict(last_model['state_dict'])
             self.optimizer.load_state_dict(last_model['optim_dict'])

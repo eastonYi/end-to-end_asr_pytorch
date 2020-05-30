@@ -17,12 +17,12 @@ def learn_cross_entropy():
 
     # PART 1: confirm F.cross_entropy() == F.log_softmax() + F.nll_loss()
     ce = F.cross_entropy(
-        input, target, ignore_index=IGNORE_ID, reduction='elementwise_mean')
+        input, target, ignore_index=IGNORE_ID, reduction='mean')
     print("### Using F.cross_entropy()")
     print("ce =", ce)
     ls = F.log_softmax(input, dim=1)
     nll = F.nll_loss(ls, target, ignore_index=IGNORE_ID,
-                     reduction='elementwise_mean')
+                     reduction='mean')
     print("### Using F.log_softmax() + F.nll_loss()")
     print("nll =", nll)
     print("### [CONFIRM] F.cross_entropy() == F.log_softmax() + F.nll_loss()\n")

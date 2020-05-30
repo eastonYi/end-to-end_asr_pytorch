@@ -7,7 +7,7 @@ stage='train'
 
 model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
-dict=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
+vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
 expdir=exp/transformer # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 
@@ -63,7 +63,7 @@ if [ $stage = 'train' ];then
     CUDA_VISIBLE_DEVICES=${gpu_id} python $model_src/train.py \
             --train-json ${feat_train_dir}/data.json \
             --valid-json ${feat_dev_dir}/data.json \
-            --dict ${dict} \
+            --vocab ${vocab} \
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
             --d_input $d_input \
@@ -96,7 +96,7 @@ if [ $stage = 'test' ];then
     export PYTHONWARNINGS="ignore"
     CUDA_VISIBLE_DEVICES=1 python $model_src/recognize.py \
             --recog-json ${feat_test_dir}/data.json \
-            --dict $dict \
+            --vocab $vocab \
             --output ${decode_dir}/hyp \
             --model-path $continue \
             --beam-size $beam_size \
