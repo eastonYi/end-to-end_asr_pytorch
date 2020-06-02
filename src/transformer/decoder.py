@@ -229,7 +229,7 @@ class Decoder(nn.Module):
         for hyp in nbest_hyps:
             hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
 
-        return nbest_hyps
+        return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 
     def recognize_batch_beam(self, encoder_outputs, char_list, args):
         """Batch Beam search.

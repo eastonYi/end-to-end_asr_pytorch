@@ -37,9 +37,9 @@ class Transformer_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | Current Loss {:.3f} | lr {:.3e} | {:.1f} ms/batch'.
+                print('Epoch {} | Iter {} | Current Loss {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
                       format(epoch + 1, i + 1, ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
-                             1000 * (time.time() - start) / (i + 1)),
+                             1000 * (time.time() - start) / (i + 1), self.optimizer.step_num),
                       flush=True)
 
             # visualizing loss using visdom
@@ -73,7 +73,7 @@ class Transformer_CTC_Solver(Solver):
             vis_iters = torch.arange(1, len(data_loader) + 1)
             vis_iters_loss = torch.Tensor(len(data_loader))
 
-        for i, (data) in enumerate(data_loader):
+        for i, data in enumerate(data_loader):
             padded_input, input_lengths, padded_target = data
             padded_input = padded_input.cuda()
             input_lengths = input_lengths.cuda()

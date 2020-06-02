@@ -95,7 +95,7 @@ class AudioDataLoader(data.DataLoader):
     NOTE: just use batchsize=1 here, so drop_last=True makes no sense here.
     """
 
-    def __init__(self, token2idx, *args, LFR_m=1, LFR_n=1, **kwargs):
+    def __init__(self, *args, token2idx=None, LFR_m=1, LFR_n=1, **kwargs):
         super().__init__(*args, **kwargs)
         self.collate_fn = LFRCollate(token2idx, LFR_m=LFR_m, LFR_n=LFR_n)
 
@@ -161,7 +161,7 @@ def load_inputs_and_targets(batch, token2idx, LFR_m=1, LFR_n=1):
 
     # remove zero-lenght samples
     xs = [xs[i] for i in nonzero_sorted_idx]
-    ys = [np.fromiter(map(token2idx, map(int, ys[i])), dtype=np.int64)
+    ys = [np.fromiter(map(lambda x: token2idx[x], ys[i]), dtype=np.int64)
           for i in nonzero_sorted_idx]
 
     return xs, ys

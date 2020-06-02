@@ -33,14 +33,11 @@ def load_vocab(path, vocab_size=None):
     idx2token = defaultdict(lambda: '<unk>')
     token2idx.update({token: idx for idx, token in enumerate(vocab)})
     idx2token.update({idx: token for idx, token in enumerate(vocab)})
-    if '<space>' in vocab:
-        idx2token[token2idx['<space>']] = ' '
-    if '<blk>' in vocab:
-        idx2token[token2idx['<blk>']] = ''
-    # if '<pad>' in vocab:
-    #     idx2token[token2idx['<pad>']] = ''
-    if '<unk>' in vocab:
-        idx2token[token2idx['<unk>']] = '<UNK>'
+    idx2token[token2idx['<pad>']] = ''
+    idx2token[token2idx['<blk>']] = ''
+    idx2token[token2idx['<unk>']] = '<UNK>'
+    idx2token[token2idx['<sos>']] = ''
+    idx2token[token2idx['<eos>']] = ''
 
     assert len(token2idx) == len(idx2token)
 

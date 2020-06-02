@@ -5,11 +5,11 @@ export PYTHONPATH=$SRC_ROOT:$PYTHONPATH
 gpu_id=0
 stage='train'
 
-structure='transformer-ctc'
+structure='conv-transformer-ctc'
 model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
 vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
-expdir=exp/transformer-ctc # tag for managing experiments.
+expdir=exp/conv-transformer-ctc # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 model=last.model
 # Training config
@@ -32,8 +32,8 @@ decode_max_len=100
 
 # Feature configuration
 do_delta=false
-LFR_m=4  # Low Frame Rate: number of frames to stack
-LFR_n=3  # Low Frame Rate: number of frames to skip
+LFR_m=1  # Low Frame Rate: number of frames to stack
+LFR_n=1  # Low Frame Rate: number of frames to skip
 
 # Network architecture
 # Encoder

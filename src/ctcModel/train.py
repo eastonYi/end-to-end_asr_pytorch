@@ -104,6 +104,9 @@ parser.add_argument('--visdom-id', default='Transformer training',
 def main(args):
     # Construct Solver
     # data
+    token2idx, idx2token = load_vocab(args.vocab)
+    vocab_size = len(token2idx)
+
     tr_dataset = AudioDataset(args.train_json, args.batch_size,
                               args.maxlen_in, args.maxlen_out,
                               batch_frames=args.batch_frames)
@@ -111,15 +114,15 @@ def main(args):
                               args.maxlen_in, args.maxlen_out,
                               batch_frames=args.batch_frames)
     tr_loader = AudioDataLoader(tr_dataset, batch_size=1,
+                                token2idx=token2idx,
                                 num_workers=args.num_workers,
                                 shuffle=args.shuffle,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     cv_loader = AudioDataLoader(cv_dataset, batch_size=1,
+                                token2idx=token2idx,
                                 num_workers=args.num_workers,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     # load dictionary and generate char_list, sos_id, eos_id
-    token2idx, idx2token = load_vocab(args.vocab)
-    vocab_size = len(token2idx)
     data = {'tr_loader': tr_loader, 'cv_loader': cv_loader}
     # model
     encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,

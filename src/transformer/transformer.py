@@ -114,6 +114,7 @@ class Transformer(nn.Module):
         if tr_loss is not None:
             package['tr_loss'] = tr_loss
             package['cv_loss'] = cv_loss
+
         return package
 
 
@@ -140,3 +141,105 @@ class CTC_Transformer(Transformer):
                                       input_lengths)
 
         return [ctc_pred_len, ctc_pred, pred], gold
+
+
+class Conv_CTC_Transformer(CTC_Transformer):
+    """An encoder-decoder framework only includes attention.
+    """
+
+    def __init__(self, conv_encoder, encoder, decoder):
+        super().__init__(encoder, decoder)
+        self.conv_encoder = conv_encoder
+
+    def forward(self, padded_input, input_lengths, padded_target):
+        """
+        Args:
+            padded_input: N x Ti x D
+            input_lengths: N
+            padded_targets: N x To
+        """
+        conv_padded_outputs, input_lengths = self.conv_encoder(padded_input, input_lengths)
+
+        encoder_padded_outputs, *_ = self.encoder(conv_padded_outputs, input_lengths)
+        ctc_pred = self.ctc_fc(encoder_padded_outputs)
+        ctc_pred_len = input_lengths
+        # pred is score before softmax
+        pred, gold, *_ = self.decoder(padded_target, encoder_padded_outputs,
+                                      input_lengths)
+
+        return [ctc_pred_len, ctc_pred, pred], gold
+
+    @staticmethod
+    def serialize(model, optimizer, epoch, LFR_m, LFR_n, tr_loss=None, cv_loss=None):
+        package = {
+            # Low Frame Rate Feature
+            'LFR_m': LFR_m,
+            'LFR_n': LFR_n,
+            # encoder
+            'd_conv_input': model.conv_encoder.input_dim,
+            'layer_num': model.conv_encoder.layer_num,
+            'd_input': model.encoder.d_input,
+            'n_layers_enc': model.encoder.n_layers,
+            'n_head': model.encoder.n_head,
+            'd_k': model.encoder.d_k,
+            'd_v': model.encoder.d_v,
+            'd_model': model.encoder.d_model,
+            'd_inner': model.encoder.d_inner,
+            'dropout': model.encoder.dropout_rate,
+            'pe_maxlen': model.encoder.pe_maxlen,
+            # decoder
+            'sos_id': model.decoder.sos_id,
+            'eos_id': model.decoder.eos_id,
+            'vocab_size': model.decoder.n_tgt_vocab,
+            'd_word_vec': model.decoder.d_word_vec,
+            'n_layers_dec': model.decoder.n_layers,
+            'tgt_emb_prj_weight_sharing': model.decoder.tgt_emb_prj_weight_sharing,
+            # state
+            'state_dict': model.state_dict(),
+            'optim_dict': optimizer.state_dict(),
+            'epoch': epoch
+        }
+        if tr_loss is not None:
+            package['tr_loss'] = tr_loss
+            package['cv_loss'] = cv_loss
+
+        return package
+
+    @classmethod
+    def load_model_from_package(cls, package):
+        from transformer.conv_encoder import Conv2dSubsample
+        from transformer.decoder import Decoder
+        from transformer.encoder import Encoder
+
+        conv_encoder = Conv2dSubsample(
+                          package['d_conv_input'],
+                          package['d_model'],
+                          package['layer_num'])
+        encoder = Encoder(package['d_en_input'],
+                          package['n_layers_enc'],
+                          package['n_head'],
+                          package['d_k'],
+                          package['d_v'],
+                          package['d_model'],
+                          package['d_inner'],
+                          dropout=package['dropout'],
+                          pe_maxlen=package['pe_maxlen'])
+        decoder = Decoder(package['sos_id'],
+                          package['eos_id'],
+                          package['vocab_size'],
+                          package['d_word_vec'],
+                          package['n_layers_dec'],
+                          package['n_head'],
+                          package['d_k'],
+                          package['d_v'],
+                          package['d_model'],
+                          package['d_inner'],
+                          dropout=package['dropout'],
+                          tgt_emb_prj_weight_sharing=package['tgt_emb_prj_weight_sharing'],
+                          pe_maxlen=package['pe_maxlen'],
+                          )
+        model = cls(conv_encoder, encoder, decoder)
+        model.load_state_dict(package['state_dict'])
+        LFR_m, LFR_n = package['LFR_m'], package['LFR_n']
+        
+        return model, LFR_m, LFR_n

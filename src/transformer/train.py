@@ -85,7 +85,7 @@ parser.add_argument('--checkpoint', dest='checkpoint', default=0, type=int,
                     help='Enables checkpoint saving of model')
 parser.add_argument('--_continue', default='', type=int,
                     help='Continue from checkpoint model')
-parser.add_argument('--model-path', default='final.pth.tar',
+parser.add_argument('--model-path', default='last.model',
                     help='Location to save best validation model')
 # logging
 parser.add_argument('--print-freq', default=10, type=int,
@@ -116,10 +116,12 @@ def main(args):
                               args.maxlen_in, args.maxlen_out,
                               batch_frames=args.batch_frames)
     tr_loader = AudioDataLoader(tr_dataset, batch_size=1,
+                                token2idx=token2idx,
                                 num_workers=args.num_workers,
                                 shuffle=args.shuffle,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     cv_loader = AudioDataLoader(cv_dataset, batch_size=1,
+                                token2idx=token2idx,
                                 num_workers=args.num_workers,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     # load dictionary and generate char_list, sos_id, eos_id
@@ -137,21 +139,29 @@ def main(args):
         from transformer.solver import Transformer_CTC_Solver as Solver
     elif args.structure == 'conv-transformer-ctc':
         from transformer.decoder import Decoder
-        from transformer.encoder import Conv_Encoder as Encoder
-        from transformer.Transformer import CTC_Transformer as Transformer
+        from transformer.encoder import Encoder
+        from transformer.Transformer import Conv_CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
 
     # model
-    encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
-                      args.d_k, args.d_v, args.d_model, args.d_inner,
-                      dropout=args.dropout, pe_maxlen=args.pe_maxlen)
     decoder = Decoder(sos_id, eos_id, vocab_size,
                       args.d_word_vec, args.n_layers_dec, args.n_head,
                       args.d_k, args.d_v, args.d_model, args.d_inner,
                       dropout=args.dropout,
                       tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
                       pe_maxlen=args.pe_maxlen)
-    model = Transformer(encoder, decoder)
+    if args.structure == 'conv-transformer-ctc':
+        from transformer.conv_encoder import Conv2dSubsample
+        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model, layer_num=3)
+        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        model = Transformer(conv_encoder, encoder, decoder)
+    else:
+        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        model = Transformer(encoder, decoder)
     print(model)
     model.cuda()
 
