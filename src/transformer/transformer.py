@@ -169,6 +169,22 @@ class Conv_CTC_Transformer(CTC_Transformer):
 
         return [ctc_pred_len, ctc_pred, pred], gold
 
+    def recognize(self, input, input_length, char_list, args):
+        """Sequence-to-Sequence beam search, decode one utterence now.
+        Args:
+            input: T x D
+            char_list: list of characters
+            args: args.beam
+        Returns:
+            nbest_hyps:
+        """
+        conv_padded_output, input_length = self.conv_encoder(input.unsqueeze(0), input_length)
+        encoder_outputs, *_ = self.encoder(conv_padded_output, input_length)
+        nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0],
+                                                 char_list,
+                                                 args)
+        return nbest_hyps
+
     @staticmethod
     def serialize(model, optimizer, epoch, LFR_m, LFR_n, tr_loss=None, cv_loss=None):
         package = {
@@ -215,7 +231,7 @@ class Conv_CTC_Transformer(CTC_Transformer):
                           package['d_conv_input'],
                           package['d_model'],
                           package['layer_num'])
-        encoder = Encoder(package['d_en_input'],
+        encoder = Encoder(package['d_input'],
                           package['n_layers_enc'],
                           package['n_head'],
                           package['d_k'],
@@ -241,5 +257,5 @@ class Conv_CTC_Transformer(CTC_Transformer):
         model = cls(conv_encoder, encoder, decoder)
         model.load_state_dict(package['state_dict'])
         LFR_m, LFR_n = package['LFR_m'], package['LFR_n']
-        
+
         return model, LFR_m, LFR_n
