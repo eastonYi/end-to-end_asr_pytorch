@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from decoder import Decoder
+from decoder import Decoder_CIF as Decoder
 from encoder import Encoder
 from attentionAssigner import Attention_Assigner
 
@@ -10,66 +10,17 @@ class CIF_Model(nn.Module):
     """An encoder-decoder framework only includes attention.
     """
 
-    def __init__(self, encoder, assigner, decoder):
+    def __init__(self, conv_encoder, encoder, assigner, decoder):
         super().__init__()
+        self.conv_encoder = conv_encoder
         self.encoder = encoder
         self.assigner = assigner
         self.decoder = decoder
+        self.ctc_fc = nn.Linear(encoder.dim_output, decoder.dim_output, bias=False)
 
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-
-    def cif(self, hidden, alphas, threshold, log=False):
-        batch_size, len_time, hidden_size = hidden.shape
-
-        # loop vars
-        integrate = torch.zeros([batch_size])
-        frame = torch.zeros([batch_size, hidden_size])
-        # intermediate vars along time
-        list_fires = []
-        list_frames = []
-
-        for t in range(len_time):
-            alpha = alphas[:, t]
-            distribution_completion = torch.ones([batch_size]) - integrate
-
-            integrate += alpha
-            list_fires.append(integrate)
-
-            fire_place = integrate > threshold
-            integrate = torch.where(fire_place,
-                                 x=integrate - torch.ones([batch_size]),
-                                 y=integrate)
-            cur = torch.where(fire_place,
-                           x=distribution_completion,
-                           y=alpha)
-            remainds = alpha - cur
-
-            frame += cur[:, None] * hidden[:, t, :]
-            list_frames.append(frame)
-            frame = torch.where(torch.tile(fire_place[:, None], [1, hidden_size]),
-                             x=remainds[:, None] * hidden[:, t, :],
-                             y=frame)
-            if log:
-                print('t: {}\t{:.3f} -> {:.3f}|{:.3f}'.format(t, integrate[0].numpy(), cur[0].numpy(), remainds[0].numpy()))
-
-        fires = torch.stack(list_fires, 1)
-        frames = torch.stack(list_frames, 1)
-        list_ls = []
-        # len_labels = torch.cast(torch.round(torch.reduce_sum(alphas, -1)), torch.int32)
-        len_labels = torch.cast(torch.math.ceil(torch.reduce_sum(alphas, -1)-0.001), torch.int32)
-        max_label_len = torch.reduce_max(len_labels)
-        for b in range(batch_size):
-            fire = fires[b, :]
-            l = torch.gather_nd(frames[b, :, :], torch.where(fire > threshold))
-            pad_l = torch.zeros([max_label_len-l.shape[0], hidden_size])
-            list_ls.append(torch.concat([l, pad_l], 0))
-
-        if log:
-            print('fire:\n', fires.numpy())
-
-        return torch.stack(list_ls, 0)
 
     def forward(self, padded_input, input_lengths, padded_target, threshold=0.95):
         """
@@ -78,22 +29,78 @@ class CIF_Model(nn.Module):
             input_lengths: N
             padded_targets: N x To
         """
-        encoder_padded_outputs, *_ = self.encoder(padded_input, input_lengths)
-        # pred is score before softmax
+        conv_padded_outputs, input_lengths = self.conv_encoder(padded_input, input_lengths)
+        encoder_padded_outputs, *_ = self.encoder(conv_padded_outputs, input_lengths)
 
-        alpha = self.assigner(encoder_padded_outputs)
+        ctc_pred = self.ctc_fc(encoder_padded_outputs)
+        ctc_pred_len = input_lengths
+
+        alpha = self.assigner(encoder_padded_outputs, input_lengths)
+
         # sum
         _num = alpha.sum(-1)
         # scaling
         num = (padded_target > 0).float().sum(-1)
-        alpha *= torch.tile((num / _num)[:, None], [1, alpha.shape[1]])
+        alpha *= (num / _num)[:, None].repeat(1, alpha.size(1))
 
         # cif
-        l = self.cif(encoder_padded_outputs, alpha, threshold=threshold)
+        with torch.cuda.device(padded_input.device):
+            l = self.cif(encoder_padded_outputs, alpha, threshold=threshold)
 
-        pred, gold, *_ = self.decoder(padded_target, l, input_lengths)
+        pred = self.decoder.teacher_forcing(padded_target, l, input_lengths)
 
-        return pred, gold
+        return [ctc_pred_len, ctc_pred, pred], padded_target
+
+    def cif(self, hidden, alphas, threshold, log=False):
+        batch_size, len_time, hidden_size = hidden.size()
+
+        # loop vars
+        integrate = torch.zeros([batch_size]).cuda()
+        frame = torch.zeros([batch_size, hidden_size]).cuda()
+        # intermediate vars along time
+        list_fires = []
+        list_frames = []
+
+        for t in range(len_time):
+            alpha = alphas[:, t]
+            distribution_completion = torch.ones([batch_size]).cuda() - integrate
+
+            integrate += alpha
+            list_fires.append(integrate)
+
+            fire_place = integrate > threshold
+            integrate = torch.where(fire_place,
+                                    integrate - torch.ones([batch_size]).cuda(),
+                                    integrate)
+            cur = torch.where(fire_place,
+                              distribution_completion,
+                              alpha)
+            remainds = alpha - cur
+
+            frame += cur[:, None] * hidden[:, t, :]
+            list_frames.append(frame)
+            frame = torch.where(fire_place[:, None].repeat(1, hidden_size),
+                                remainds[:, None] * hidden[:, t, :],
+                                frame)
+            if log:
+                print('t: {}\t{:.3f} -> {:.3f}|{:.3f}'.format(
+                    t, integrate[0].numpy(), cur[0].numpy(), remainds[0].numpy()))
+
+        fires = torch.stack(list_fires, 1)
+        frames = torch.stack(list_frames, 1)
+        list_ls = []
+        len_labels = (alphas.sum(-1) - 0.001).ceil().int()
+        max_label_len = len_labels.max()
+        for b in range(batch_size):
+            fire = fires[b, :]
+            l = torch.index_select(frames[b, :, :], 0, torch.where(fire > threshold)[0])
+            pad_l = torch.zeros([max_label_len - l.size(0), hidden_size]).cuda()
+            list_ls.append(torch.cat([l, pad_l], 0))
+
+        if log:
+            print('fire:\n', fires.numpy())
+
+        return torch.stack(list_ls, 0)
 
     def recognize(self, input, input_length, char_list, args):
         """Sequence-to-Sequence beam search, decode one utterence now.
@@ -105,9 +112,9 @@ class CIF_Model(nn.Module):
             nbest_hyps:
         """
         encoder_outputs, *_ = self.encoder(input.unsqueeze(0), input_length)
-        nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0],
-                                                 char_list,
-                                                 args)
+
+        nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0], char_list, args)
+
         return nbest_hyps
 
     @classmethod

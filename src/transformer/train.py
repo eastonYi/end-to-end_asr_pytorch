@@ -24,6 +24,10 @@ parser.add_argument('--LFR_m', default=4, type=int,
 parser.add_argument('--LFR_n', default=3, type=int,
                     help='Low Frame Rate: number of frames to skip')
 # Network architecture
+
+# conv_encoder
+parser.add_argument('--num_conv_layers', default=3, type=int,
+                    help='Dimension of key')
 # encoder
 # TODO: automatically infer input dim
 parser.add_argument('--structure', type=str, default='transformer',
@@ -45,6 +49,11 @@ parser.add_argument('--d_inner', default=2048, type=int,
 parser.add_argument('--dropout', default=0.1, type=float,
                     help='Dropout rate')
 parser.add_argument('--pe_maxlen', default=5000, type=int,
+                    help='Positional Encoding max len')
+# assigner
+parser.add_argument('--context_width', default=3, type=int,
+                    help='Positional Encoding max len')
+parser.add_argument('--num_assigner_layers', default=3, type=int,
                     help='Positional Encoding max len')
 # decoder
 parser.add_argument('--d_word_vec', default=512, type=int,
@@ -132,36 +141,77 @@ def main(args):
         from transformer.encoder import Encoder
         from transformer.Transformer import Transformer
         from transformer.solver import Transformer_Solver as Solver
+
+        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        decoder = Decoder(sos_id, eos_id, vocab_size,
+                          args.d_word_vec, args.n_layers_dec, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout,
+                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
+                          pe_maxlen=args.pe_maxlen)
+        model = Transformer(encoder, decoder)
+
     elif args.structure == 'transformer-ctc':
         from transformer.decoder import Decoder
         from transformer.encoder import Encoder
         from transformer.Transformer import CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
+
+        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        decoder = Decoder(sos_id, eos_id, vocab_size,
+                          args.d_word_vec, args.n_layers_dec, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout,
+                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
+                          pe_maxlen=args.pe_maxlen)
+        model = Transformer(encoder, decoder)
+
     elif args.structure == 'conv-transformer-ctc':
         from transformer.decoder import Decoder
         from transformer.encoder import Encoder
         from transformer.Transformer import Conv_CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
-
-    # model
-    decoder = Decoder(sos_id, eos_id, vocab_size,
-                      args.d_word_vec, args.n_layers_dec, args.n_head,
-                      args.d_k, args.d_v, args.d_model, args.d_inner,
-                      dropout=args.dropout,
-                      tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                      pe_maxlen=args.pe_maxlen)
-    if args.structure == 'conv-transformer-ctc':
         from transformer.conv_encoder import Conv2dSubsample
+
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model, layer_num=3)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        decoder = Decoder(sos_id, eos_id, vocab_size,
+                          args.d_word_vec, args.n_layers_dec, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout,
+                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
+                          pe_maxlen=args.pe_maxlen)
         model = Transformer(conv_encoder, encoder, decoder)
-    else:
-        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
+
+    elif args.structure == 'cif':
+        from transformer.conv_encoder import Conv2dSubsample
+        from transformer.encoder import Encoder
+        from transformer.attentionAssigner import Attention_Assigner
+        from transformer.decoder import Decoder_CIF as Decoder
+        from transformer.CIF_Model import CIF_Model
+        from transformer.solver import Transformer_CTC_Solver as Solver
+
+        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+                                       layer_num=args.num_conv_layers)
+        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
+                                      context_width=args.context_width,
+                                      layer_num=args.num_assigner_layers)
+        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        model = Transformer(encoder, decoder)
+        decoder = Decoder(vocab_size, args.d_word_vec, args.n_layers_dec,
+                          args.n_head, args.d_k, args.d_v, args.d_model,
+                          args.d_inner, dropout=args.dropout,
+                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
+                          pe_maxlen=args.pe_maxlen)
+        model = CIF_Model(conv_encoder, encoder, assigner, decoder)
+
     print(model)
     model.cuda()
 

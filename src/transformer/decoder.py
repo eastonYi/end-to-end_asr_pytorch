@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from transformer.encoder import EncoderLayer
 from transformer.attention import MultiHeadAttention
 from transformer.module import PositionalEncoding, PositionwiseFeedForward
 from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, \
@@ -318,11 +319,85 @@ class Decoder(nn.Module):
         return nbest_hyps
 
 
+class Decoder_CIF(Decoder):
+    """Encoder of Transformer including self-attention and feed forward.
+    """
+    def __init__(self, n_tgt_vocab, d_word_vec, n_layers, n_head, d_k, d_v,
+                 d_model, d_inner, dropout=0.1, tgt_emb_prj_weight_sharing=True,
+                 pe_maxlen=5000):
+        # parameters
+        nn.Module.__init__(self)
+        # parameters
+        self.n_tgt_vocab = n_tgt_vocab
+        self.d_word_vec = d_word_vec
+        self.n_layers = n_layers
+        self.n_head = n_head
+        self.d_k = d_k
+        self.d_v = d_v
+        self.d_model = d_model
+        self.d_inner = d_inner
+        self.dim_output = n_tgt_vocab
+        self.dropout = dropout
+        self.tgt_emb_prj_weight_sharing = tgt_emb_prj_weight_sharing
+        self.pe_maxlen = pe_maxlen
+
+        self.tgt_word_emb = nn.Embedding(n_tgt_vocab, d_word_vec)
+        self.positional_encoding = PositionalEncoding(d_model, max_len=pe_maxlen)
+        self.dropout = nn.Dropout(dropout)
+
+        self.layer_stack = nn.ModuleList([
+            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+            for _ in range(n_layers)])
+        self.input_affine = nn.Linear(2*d_model, d_model, bias=False)
+
+        self.tgt_word_prj = nn.Linear(d_model, n_tgt_vocab, bias=False)
+        nn.init.xavier_normal_(self.tgt_word_prj.weight)
+
+        if tgt_emb_prj_weight_sharing:
+            # Share the weight matrix between target word embedding & the final logit dense layer
+            self.tgt_word_prj.weight = self.tgt_word_emb.weight
+            self.x_logit_scale = (d_model ** 0.5)
+        else:
+            self.x_logit_scale = 1.
+
+    def teacher_forcing(self, target, encoded, len_encoded):
+        """
+        Args:
+            padded_input: N x T x D
+            input_lengths: N
+
+        Returns:
+            enc_output: N x T x H
+        """
+        # Prepare masks
+        non_pad_mask = get_non_pad_mask(target, pad_idx=0)
+
+        slf_attn_mask_subseq = get_subsequent_mask(target)
+        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=target,
+                                                     seq_q=target,
+                                                     pad_idx=0)
+        slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
+
+        target_emb = self.dropout(self.tgt_word_emb(target) * self.x_logit_scale +
+                                  self.positional_encoding(target))
+
+        dec_output = self.input_affine(torch.cat([encoded, target_emb], -1))
+
+        for dec_layer in self.layer_stack:
+            import pdb; pdb.set_trace()
+            dec_output, dec_slf_attn = dec_layer(
+                dec_output,
+                non_pad_mask=non_pad_mask,
+                slf_attn_mask=slf_attn_mask)
+
+        return dec_output
+
+
 class DecoderLayer(nn.Module):
     ''' Compose with three layers '''
 
     def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
-        super(DecoderLayer, self).__init__()
+        super().__init__()
         self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
         self.enc_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
