@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from conv_encoder import Conv2dSubsample as Conv_Encoder
 from decoder import Decoder_CIF as Decoder
 from encoder import Encoder
 from attentionAssigner import Attention_Assigner
@@ -129,30 +130,45 @@ class CIF_Model(nn.Module):
 
     @classmethod
     def load_model_from_package(cls, package):
-        encoder = Encoder(package['d_input'],
-                          package['n_layers_enc'],
-                          package['n_head'],
-                          package['d_k'],
-                          package['d_v'],
-                          package['d_model'],
-                          package['d_inner'],
-                          dropout=package['dropout'],
-                          pe_maxlen=package['pe_maxlen'])
-        decoder = Decoder(package['sos_id'],
-                          package['eos_id'],
-                          package['vocab_size'],
-                          package['d_word_vec'],
-                          package['n_layers_dec'],
-                          package['n_head'],
-                          package['d_k'],
-                          package['d_v'],
-                          package['d_model'],
-                          package['d_inner'],
-                          dropout=package['dropout'],
-                          tgt_emb_prj_weight_sharing=package['tgt_emb_prj_weight_sharing'],
-                          pe_maxlen=package['pe_maxlen'],
-                          )
-        model = cls(encoder, decoder)
+        conv_encoder = Conv_Encoder(
+                        package['d_input'],
+                        package['n_layers_enc'],
+                        package['n_head'],
+                        package['d_k'],
+                        package['d_v'],
+                        package['d_model'],
+                        package['d_inner'],
+                        dropout=package['dropout'],
+                        pe_maxlen=package['pe_maxlen'])
+        encoder = Encoder(
+                        package['d_input'],
+                        package['n_layers_enc'],
+                        package['n_head'],
+                        package['d_k'],
+                        package['d_v'],
+                        package['d_model'],
+                        package['d_inner'],
+                        dropout=package['dropout'],
+                        pe_maxlen=package['pe_maxlen'])
+        assigner = Attention_Assigner(
+                        package['d_model'],
+                        package['d_model'],
+                        package['context_width'],
+                        package['num_assigner_layers'])
+        decoder = Decoder(
+                        package['sos_id'],
+                        package['vocab_size'],
+                        package['d_word_vec'],
+                        package['n_layers_dec'],
+                        package['n_head'],
+                        package['d_k'],
+                        package['d_v'],
+                        package['d_model'],
+                        package['d_inner'],
+                        dropout=package['dropout'],
+                        tgt_emb_prj_weight_sharing=package['tgt_emb_prj_weight_sharing'],
+                        pe_maxlen=package['pe_maxlen'])
+        model = cls(conv_encoder, encoder, assigner, decoder)
         model.load_state_dict(package['state_dict'])
         LFR_m, LFR_n = package['LFR_m'], package['LFR_n']
         return model, LFR_m, LFR_n
@@ -173,9 +189,11 @@ class CIF_Model(nn.Module):
             'd_inner': model.encoder.d_inner,
             'dropout': model.encoder.dropout_rate,
             'pe_maxlen': model.encoder.pe_maxlen,
+            # assigner
+            'context_width': model.assigner.context_width,
+            'num_assigner_layers': model.assigner.layer_num,
             # decoder
             'sos_id': model.decoder.sos_id,
-            'eos_id': model.decoder.eos_id,
             'vocab_size': model.decoder.n_tgt_vocab,
             'd_word_vec': model.decoder.d_word_vec,
             'n_layers_dec': model.decoder.n_layers,

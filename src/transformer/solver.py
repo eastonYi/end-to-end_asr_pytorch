@@ -147,7 +147,7 @@ class CIF_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | ctc|qua|ce {:.3f}|{:.3f}|{:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
+                print('Epoch {} | Iter {} | ctc {:.3f} | qua {:.3f} | ce {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
                       format(epoch + 1, i + 1, qua_loss.item(), ctc_loss.item(), ce_loss.item(),
                              self.optimizer.optimizer.param_groups[0]["lr"],
                              1000 * (time.time() - start) / (i + 1),
