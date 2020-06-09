@@ -105,6 +105,7 @@ class Conv2dSubsample(nn.Module):
         outputs = self.conv(outputs)[:, :, :, :self.dim_conv_out]
         B, C, T, D = outputs.size()
         outputs = outputs.permute(0, 2, 1, 3).contiguous().view(B, T, C*D)
+
         if self.pad == 'same':
             output_lengths = feat_lengths
             tensor_length = input_length

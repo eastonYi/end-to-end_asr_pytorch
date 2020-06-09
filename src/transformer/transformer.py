@@ -151,25 +151,24 @@ class Conv_CTC_Transformer(CTC_Transformer):
         super().__init__(encoder, decoder)
         self.conv_encoder = conv_encoder
 
-    def forward(self, padded_input, input_lengths, padded_target):
+    def forward(self, features, len_features, targets):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
-        conv_padded_outputs, input_lengths = self.conv_encoder(padded_input, input_lengths)
+        conv_outputs, len_sequence = self.conv_encoder(features, len_features)
+        encoder_outputs, *_ = self.encoder(len_sequence, len_sequence)
 
-        encoder_padded_outputs, *_ = self.encoder(conv_padded_outputs, input_lengths)
-        ctc_pred = self.ctc_fc(encoder_padded_outputs)
-        ctc_pred_len = input_lengths
-        # pred is score before softmax
-        pred, gold, *_ = self.decoder(padded_target, encoder_padded_outputs,
-                                      input_lengths)
+        ctc_logits = self.ctc_fc(encoder_outputs)
+        ctc_pred_len = len_sequence
 
-        return [ctc_pred_len, ctc_pred, pred], gold
+        logits = self.decoder(targets, encoder_outputs, len_sequence)
 
-    def recognize(self, input, input_length, char_list, args):
+        return ctc_logits, ctc_pred_len, logits
+
+    def recognize(self, feature, len_feature, char_list, args):
         """Sequence-to-Sequence beam search, decode one utterence now.
         Args:
             input: T x D
@@ -178,8 +177,8 @@ class Conv_CTC_Transformer(CTC_Transformer):
         Returns:
             nbest_hyps:
         """
-        conv_padded_output, input_length = self.conv_encoder(input.unsqueeze(0), input_length)
-        encoder_outputs, *_ = self.encoder(conv_padded_output, input_length)
+        conv_outputs, len_sequence = self.conv_encoder(feature.unsqueeze(0), len_feature)
+        encoder_outputs, *_ = self.encoder(conv_outputs, len_sequence)
         nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0],
                                                  char_list,
                                                  args)

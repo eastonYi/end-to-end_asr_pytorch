@@ -195,7 +195,7 @@ def main(args):
         from transformer.attentionAssigner import Attention_Assigner
         from transformer.decoder import Decoder_CIF as Decoder
         from transformer.CIF_Model import CIF_Model
-        from transformer.solver import Transformer_CTC_Solver as Solver
+        from transformer.solver import CIF_Solver as Solver
 
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
                                        layer_num=args.num_conv_layers)
@@ -205,7 +205,7 @@ def main(args):
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(vocab_size, args.d_word_vec, args.n_layers_dec,
+        decoder = Decoder(sos_id, vocab_size, args.d_word_vec, args.n_layers_dec,
                           args.n_head, args.d_k, args.d_v, args.d_model,
                           args.d_inner, dropout=args.dropout,
                           tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,

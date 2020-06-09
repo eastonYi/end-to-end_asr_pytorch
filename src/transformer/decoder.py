@@ -322,12 +322,13 @@ class Decoder(nn.Module):
 class Decoder_CIF(Decoder):
     """Encoder of Transformer including self-attention and feed forward.
     """
-    def __init__(self, n_tgt_vocab, d_word_vec, n_layers, n_head, d_k, d_v,
+    def __init__(self, sos_id, n_tgt_vocab, d_word_vec, n_layers, n_head, d_k, d_v,
                  d_model, d_inner, dropout=0.1, tgt_emb_prj_weight_sharing=True,
                  pe_maxlen=5000):
         # parameters
         nn.Module.__init__(self)
         # parameters
+        self.sos_id = sos_id  # Start of Sentence
         self.n_tgt_vocab = n_tgt_vocab
         self.d_word_vec = d_word_vec
         self.n_layers = n_layers
@@ -360,7 +361,18 @@ class Decoder_CIF(Decoder):
         else:
             self.x_logit_scale = 1.
 
-    def teacher_forcing(self, target, encoded, len_encoded):
+    def preprocess(self, target):
+        """Generate decoder input and output label from padded_input
+        Add <sos> to decoder input, and add <eos> to decoder output label
+        """
+        pad_mask = (target > 0).long()
+        sos = torch.ones(target.size(0), 1).fill_(self.sos_id).long().cuda()
+        ys_in = torch.cat([sos, target[:, :-1]], 1)
+        ys_in *= pad_mask
+
+        return ys_in
+
+    def forward(self, encoded_attentioned, target):
         """
         Args:
             padded_input: N x T x D
@@ -370,27 +382,107 @@ class Decoder_CIF(Decoder):
             enc_output: N x T x H
         """
         # Prepare masks
+        ys_in = self.preprocess(target)
         non_pad_mask = get_non_pad_mask(target, pad_idx=0)
 
-        slf_attn_mask_subseq = get_subsequent_mask(target)
-        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=target,
-                                                     seq_q=target,
-                                                     pad_idx=0)
+        slf_attn_mask_subseq = get_subsequent_mask(ys_in)
+        slf_attn_mask_keypad = get_attn_key_pad_mask(
+            seq_k=ys_in, seq_q=ys_in, pad_idx=0)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
 
-        target_emb = self.dropout(self.tgt_word_emb(target) * self.x_logit_scale +
-                                  self.positional_encoding(target))
+        ys_in_emb = self.dropout(self.tgt_word_emb(ys_in) * self.x_logit_scale +
+                                 self.positional_encoding(ys_in))
 
-        dec_output = self.input_affine(torch.cat([encoded, target_emb], -1))
+        dec_output = self.input_affine(torch.cat([encoded_attentioned, ys_in_emb], -1))
 
         for dec_layer in self.layer_stack:
-            import pdb; pdb.set_trace()
             dec_output, dec_slf_attn = dec_layer(
                 dec_output,
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask)
 
-        return dec_output
+        logits = self.tgt_word_prj(dec_output)
+
+        return logits
+
+    def step_forward(self, ys, encoded_attentioned, t):
+        # -- Prepare masks
+        non_pad_mask = torch.ones_like(ys).float().unsqueeze(-1) # 1xix1
+        slf_attn_mask = get_subsequent_mask(ys)
+
+        # -- Forward
+        target_emb = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+        dec_output = self.input_affine(torch.cat([encoded_attentioned[:, :t, :], target_emb], -1))
+
+        for dec_layer in self.layer_stack:
+            dec_output, _, _ = dec_layer(
+                dec_output, encoded_attentioned,
+                non_pad_mask=non_pad_mask,
+                slf_attn_mask=slf_attn_mask,
+                dec_enc_attn_mask=None)
+
+        seq_logit = self.tgt_word_prj(dec_output[:, -1])
+
+        local_scores = F.log_softmax(seq_logit, dim=1)
+
+        return local_scores
+
+    def recognize_beam(self, encoded_attentioned, char_list, args):
+        """Beam search, decode one utterence now.
+        Args:
+            encoder_outputs: T x H
+            char_list: list of character
+            args: args.beam
+
+        Returns:
+            nbest_hyps:
+        """
+        # search params
+        beam = args.beam_size
+        nbest = args.nbest
+        maxlen = encoded_attentioned.size(1)
+
+        # prepare sos
+        ys = torch.ones(1, 1).fill_(self.sos_id).int()
+
+        # yseq: 1xT
+        hyp = {'score': 0.0, 'yseq': ys}
+        hyps = [hyp]
+
+        for i in range(maxlen):
+            hyps_best_kept = []
+            for hyp in hyps:
+                ys = hyp['yseq']  # 1 x i
+                local_scores = self.step_forward(ys, encoded_attentioned, i)
+
+                # topk scores
+                local_best_scores, local_best_ids = torch.topk(
+                    local_scores, beam, dim=1)
+
+                for j in range(beam):
+                    new_hyp = {}
+                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
+                    new_hyp['yseq'] = torch.ones(1, (1 + ys.size(1))).int()
+                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
+                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
+                    # will be (2 x beam) hyps at most
+                    hyps_best_kept.append(new_hyp)
+
+            hyps = sorted(hyps_best_kept,
+                          key=lambda x: x['score'],
+                          reverse=True)[:beam]
+
+            for hyp in hyps:
+                print('hypo: ' + ''.join([char_list[int(x)]
+                                          for x in hyp['yseq'][0, 1:]]))
+        # end for i in range(maxlen)
+        nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
+        # compitable with LAS implementation
+        for hyp in nbest_hyps:
+            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+
+        return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
+
 
 
 class DecoderLayer(nn.Module):

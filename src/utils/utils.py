@@ -169,12 +169,13 @@ def get_non_pad_mask(padded_input, input_lengths=None, pad_idx=None):
         non_pad_mask = padded_input.new_ones(padded_input.size()[:-1])  # N x T
         for i in range(N):
             non_pad_mask[i, input_lengths[i]:] = 0
-    if pad_idx is not None:
+    elif pad_idx is not None:
         # padded_input: N x T
         assert padded_input.dim() == 2
-        non_pad_mask = padded_input.ne(pad_idx).float()
+        non_pad_mask = (padded_input > pad_idx).float()
     # unsqueeze(-1) for broadcast
     return non_pad_mask.unsqueeze(-1)
+
 
 def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
@@ -191,7 +192,7 @@ def get_attn_key_pad_mask(seq_k, seq_q, pad_idx):
 
     # Expand to fit the shape of key query attention matrix.
     len_q = seq_q.size(1)
-    padding_mask = seq_k.eq(pad_idx)
+    padding_mask = seq_k.le(pad_idx)
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)  # b x lq x lk
 
     return padding_mask

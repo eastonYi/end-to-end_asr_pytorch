@@ -22,39 +22,38 @@ class CIF_Model(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, padded_input, input_lengths, padded_target, threshold=0.95):
+    def forward(self, features, len_features, targets, threshold=0.95):
         """
         Args:
-            padded_input: N x Ti x D
-            input_lengths: N
+            features: N x T x D
+            len_sequence: N
             padded_targets: N x To
         """
-        conv_padded_outputs, input_lengths = self.conv_encoder(padded_input, input_lengths)
-        encoder_padded_outputs, *_ = self.encoder(conv_padded_outputs, input_lengths)
+        conv_outputs, len_sequence = self.conv_encoder(features, len_features)
+        encoder_outputs, *_ = self.encoder(conv_outputs, len_sequence)
 
-        ctc_pred = self.ctc_fc(encoder_padded_outputs)
-        ctc_pred_len = input_lengths
+        ctc_logits = self.ctc_fc(encoder_outputs)
+        len_ctc_logits = len_sequence
 
-        alpha = self.assigner(encoder_padded_outputs, input_lengths)
+        alpha = self.assigner(encoder_outputs, len_sequence)
 
         # sum
         _num = alpha.sum(-1)
         # scaling
-        num = (padded_target > 0).float().sum(-1)
+        num = (targets > 0).float().sum(-1)
         alpha *= (num / _num)[:, None].repeat(1, alpha.size(1))
 
         # cif
-        with torch.cuda.device(padded_input.device):
-            l = self.cif(encoder_padded_outputs, alpha, threshold=threshold)
+        l = self.cif(encoder_outputs, alpha, threshold=threshold)
 
-        pred = self.decoder.teacher_forcing(padded_target, l, input_lengths)
+        logits = self.decoder(l, targets)
 
-        return [ctc_pred_len, ctc_pred, pred], padded_target
+        return ctc_logits, len_ctc_logits, _num, num, logits
 
     def cif(self, hidden, alphas, threshold, log=False):
         batch_size, len_time, hidden_size = hidden.size()
 
-        # loop vars
+        # loop varss
         integrate = torch.zeros([batch_size]).cuda()
         frame = torch.zeros([batch_size, hidden_size]).cuda()
         # intermediate vars along time
@@ -102,7 +101,7 @@ class CIF_Model(nn.Module):
 
         return torch.stack(list_ls, 0)
 
-    def recognize(self, input, input_length, char_list, args):
+    def recognize(self, input, input_length, char_list, args, threshold=0.95):
         """Sequence-to-Sequence beam search, decode one utterence now.
         Args:
             input: T x D
@@ -111,9 +110,13 @@ class CIF_Model(nn.Module):
         Returns:
             nbest_hyps:
         """
+        conv_padded_outputs, input_length = self.conv_encoder(input, input_length)
         encoder_outputs, *_ = self.encoder(input.unsqueeze(0), input_length)
+        alpha = self.assigner(encoder_outputs, input_length)
 
-        nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0], char_list, args)
+        l = self.cif(encoder_outputs, alpha, threshold=threshold)
+
+        nbest_hyps = self.decoder.recognize_beam(l, char_list, args)
 
         return nbest_hyps
 
