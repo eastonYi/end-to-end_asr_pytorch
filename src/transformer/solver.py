@@ -142,17 +142,21 @@ class CIF_Solver(Solver):
             qua_loss, ctc_loss, ce_loss = cal_ctc_qua_ce_loss(
                 logits_ctc, len_logits_ctc, _number, number, logits_ce, targets,
                 smoothing=self.label_smoothing)
-            loss = qua_loss + ctc_loss + ce_loss
+
             if not cross_valid:
+                loss = qua_loss + ctc_loss + ce_loss
+
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+            else:
+                loss = ce_loss
 
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
                 print('Epoch {} | Iter {} | ctc {:.3f} | qua {:.3f} | ce {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
-                      format(epoch + 1, i + 1, qua_loss.item(), ctc_loss.item(), ce_loss.item(),
+                      format(epoch + 1, i + 1, ctc_loss.item(), qua_loss.item(), ce_loss.item(),
                              self.optimizer.optimizer.param_groups[0]["lr"],
                              1000 * (time.time() - start) / (i + 1),
                              self.optimizer.step_num),

@@ -162,11 +162,11 @@ class Conv_CTC_Transformer(CTC_Transformer):
         encoder_outputs, *_ = self.encoder(conv_outputs, len_sequence)
 
         ctc_logits = self.ctc_fc(encoder_outputs)
-        ctc_logits_len = len_sequence
+        len_ctc_logits = len_sequence
 
         logits, targets_eos = self.decoder(targets, encoder_outputs, len_sequence)
 
-        return ctc_logits, ctc_logits_len, logits, targets_eos
+        return ctc_logits, len_ctc_logits, logits, targets_eos
 
     def recognize(self, feature, len_feature, char_list, args):
         """Sequence-to-Sequence beam search, decode one utterence now.

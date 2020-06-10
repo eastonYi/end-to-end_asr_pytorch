@@ -177,7 +177,8 @@ def main(args):
         from transformer.solver import Transformer_CTC_Solver as Solver
         from transformer.conv_encoder import Conv2dSubsample
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model, layer_num=3)
+        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+                                       layer_num=args.num_conv_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
@@ -199,12 +200,12 @@ def main(args):
 
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
                                        layer_num=args.num_conv_layers)
-        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
-                                      context_width=args.context_width,
-                                      layer_num=args.num_assigner_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
+                                      context_width=args.context_width,
+                                      layer_num=args.num_assigner_layers)
         decoder = Decoder(sos_id, vocab_size, args.d_word_vec, args.n_layers_dec,
                           args.n_head, args.d_k, args.d_v, args.d_model,
                           args.d_inner, dropout=args.dropout,
