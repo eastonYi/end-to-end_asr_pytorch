@@ -159,14 +159,14 @@ class Conv_CTC_Transformer(CTC_Transformer):
             padded_targets: N x To
         """
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
-        encoder_outputs, *_ = self.encoder(len_sequence, len_sequence)
+        encoder_outputs, *_ = self.encoder(conv_outputs, len_sequence)
 
         ctc_logits = self.ctc_fc(encoder_outputs)
-        ctc_pred_len = len_sequence
+        ctc_logits_len = len_sequence
 
-        logits = self.decoder(targets, encoder_outputs, len_sequence)
+        logits, targets_eos = self.decoder(targets, encoder_outputs, len_sequence)
 
-        return ctc_logits, ctc_pred_len, logits
+        return ctc_logits, ctc_logits_len, logits, targets_eos
 
     def recognize(self, feature, len_feature, char_list, args):
         """Sequence-to-Sequence beam search, decode one utterence now.

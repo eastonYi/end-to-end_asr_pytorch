@@ -21,11 +21,11 @@ class Transformer_Solver(Solver):
             vis_iters_loss = torch.Tensor(len(data_loader))
 
         for i, (data) in enumerate(data_loader):
-            padded_input, input_lengths, padded_target = data
+            padded_input, input_lengths, targets = data
             padded_input = padded_input.cuda()
             input_lengths = input_lengths.cuda()
-            padded_target = padded_target.cuda()
-            pred, gold = self.model(padded_input, input_lengths, padded_target)
+            targets = targets.cuda()
+            pred, gold = self.model(padded_input, input_lengths, targets)
             ce_loss = cal_ce_loss(
                 pred, gold, smoothing=self.label_smoothing)
             loss = ce_loss
@@ -74,14 +74,18 @@ class Transformer_CTC_Solver(Solver):
             vis_iters_loss = torch.Tensor(len(data_loader))
 
         for i, data in enumerate(data_loader):
-            padded_input, input_lengths, padded_target = data
+            padded_input, input_lengths, targets = data
             padded_input = padded_input.cuda()
             input_lengths = input_lengths.cuda()
-            padded_target = padded_target.cuda()
-            pred, gold = self.model(padded_input, input_lengths, padded_target)
+            targets = targets.cuda()
+
+            logits_ctc, len_logits_ctc, logits_ce, targets_eos = self.model(
+                padded_input, input_lengths, targets)
+
             ctc_loss, ce_loss = cal_ctc_ce_loss(
-                pred, gold, smoothing=self.label_smoothing)
+                logits_ctc, len_logits_ctc, logits_ce, targets_eos, smoothing=self.label_smoothing)
             loss = ctc_loss + ce_loss
+
             if not cross_valid:
                 self.optimizer.zero_grad()
                 loss.backward()

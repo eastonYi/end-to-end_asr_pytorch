@@ -54,11 +54,11 @@ class Decoder(nn.Module):
         else:
             self.x_logit_scale = 1.
 
-    def preprocess(self, padded_input):
+    def preprocess(self, targets):
         """Generate decoder input and output label from padded_input
         Add <sos> to decoder input, and add <eos> to decoder output label
         """
-        ys = [y[y != 0] for y in padded_input]  # parse padded ys
+        ys = [y[y != 0] for y in targets]  # parse padded ys
         # prepare input and output word sequences with sos/eos IDs
         eos = ys[0].new([self.eos_id])
         sos = ys[0].new([self.sos_id])
@@ -66,13 +66,13 @@ class Decoder(nn.Module):
         ys_out = [torch.cat([y, eos], dim=0) for y in ys]
         # padding for ys with -1
         # pys: utt x olen
-        ys_in_pad = pad_list(ys_in, self.eos_id)
+        ys_in_pad = pad_list(ys_in, 0)
         ys_out_pad = pad_list(ys_out, 0)
         assert ys_in_pad.size() == ys_out_pad.size()
 
         return ys_in_pad, ys_out_pad
 
-    def forward(self, padded_input, encoder_padded_outputs,
+    def forward(self, targets, encoder_padded_outputs,
                 encoder_input_lengths, return_attns=False):
         """
         Args:
@@ -84,24 +84,24 @@ class Decoder(nn.Module):
         dec_slf_attn_list, dec_enc_attn_list = [], []
 
         # Get Deocder Input and Output
-        ys_in_pad, ys_out_pad = self.preprocess(padded_input)
+        targets_sos, targets_eos = self.preprocess(targets)
 
         # Prepare masks
-        non_pad_mask = get_non_pad_mask(ys_in_pad, pad_idx=self.eos_id)
+        non_pad_mask = get_non_pad_mask(targets_sos, pad_idx=0)
 
-        slf_attn_mask_subseq = get_subsequent_mask(ys_in_pad)
-        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=ys_in_pad,
-                                                     seq_q=ys_in_pad,
-                                                     pad_idx=self.eos_id)
+        slf_attn_mask_subseq = get_subsequent_mask(targets_sos)
+        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=targets_sos,
+                                                     seq_q=targets_sos,
+                                                     pad_idx=0)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
-        output_length = ys_in_pad.size(1)
+        output_length = targets_sos.size(1)
         dec_enc_attn_mask = get_attn_pad_mask(encoder_padded_outputs,
                                               encoder_input_lengths,
                                               output_length)
 
         # Forward
-        dec_output = self.dropout(self.tgt_word_emb(ys_in_pad) * self.x_logit_scale +
-                                  self.positional_encoding(ys_in_pad))
+        dec_output = self.dropout(self.tgt_word_emb(targets_sos) * self.x_logit_scale +
+                                  self.positional_encoding(targets_sos))
 
         for dec_layer in self.layer_stack:
             dec_output, dec_slf_attn, dec_enc_attn = dec_layer(
@@ -115,15 +115,12 @@ class Decoder(nn.Module):
                 dec_enc_attn_list += [dec_enc_attn]
 
         # before softmax
-        seq_logit = self.tgt_word_prj(dec_output)
-
-        # Return
-        pred, gold = seq_logit, ys_out_pad
+        logits = self.tgt_word_prj(dec_output)
 
         if return_attns:
-            return pred, gold, dec_slf_attn_list, dec_enc_attn_list
+            return logits, targets_eos, dec_slf_attn_list, dec_enc_attn_list
 
-        return pred, gold
+        return logits, targets_eos
 
     def step_forward(self, ys, encoder_outputs):
         # -- Prepare masks
