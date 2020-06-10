@@ -19,10 +19,12 @@ class Conv1d(nn.Module):
         self.name = name
 
         layers = [("{}/conv1d_0".format(name), nn.Conv1d(input_dim, hidden, context_width, 1)),
+                  ("{}/batchnorm_0".format(name), nn.BatchNorm1d(hidden)),
                   ("{}/relu_0".format(name), nn.ReLU())]
         for i in range(layer_num-1):
             layers += [
                 ("{}/conv1d_{}".format(name, i+1), nn.Conv1d(hidden, hidden, context_width, 1)),
+                ("{}/batchnorm_{}".format(name, i+1), nn.BatchNorm1d(hidden)),
                 ("{}/relu_{}".format(name, i+1), nn.ReLU())
             ]
         layers = OrderedDict(layers)
@@ -34,7 +36,6 @@ class Conv1d(nn.Module):
             feats = F.pad(feats, (0, 0, 0, self.layer_num * self.context_width))
         outputs = self.conv(feats.permute(0, 2, 1))
         outputs = outputs.permute(0, 2, 1)
-
 
         if self.pad == 'same':
             tensor_length = input_length

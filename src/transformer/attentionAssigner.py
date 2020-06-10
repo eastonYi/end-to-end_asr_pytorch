@@ -1,5 +1,5 @@
 import torch.nn as nn
-import torch.nn.functional as F
+import torch
 
 from transformer.conv_encoder import Conv1d
 from utils.utils import sequence_mask
@@ -32,7 +32,7 @@ class Attention_Assigner(nn.Module):
         """
         x, input_lengths = self.conv(padded_input, input_lengths)
         alphas = self.linear(x).squeeze(-1)
-        alphas = F.softmax(alphas, -1)
+        alphas = torch.sigmoid(alphas)
         pad_mask = sequence_mask(input_lengths)
 
         return alphas * pad_mask

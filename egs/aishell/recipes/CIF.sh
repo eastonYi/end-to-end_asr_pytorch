@@ -42,7 +42,7 @@ num_conv_layers=3
 # Encoder
 d_input=80
 n_layers_enc=6
-n_head=8
+n_head=4
 d_k=64
 d_v=64
 d_model=512

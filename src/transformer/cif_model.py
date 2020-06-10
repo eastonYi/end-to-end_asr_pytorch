@@ -17,12 +17,11 @@ class CIF_Model(nn.Module):
         self.encoder = encoder
         self.assigner = assigner
         self.decoder = decoder
+        self.ctc_fc = nn.Linear(encoder.dim_output, decoder.dim_output, bias=False)
 
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-
-        self.ctc_fc = nn.Linear(encoder.dim_output, decoder.dim_output, bias=False)
 
     def forward(self, features, len_features, targets, threshold=0.95):
         """
