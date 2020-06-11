@@ -52,7 +52,6 @@ def test(args):
     model.eval()
     model.cuda()
     token2idx, idx2token = load_vocab(args.vocab)
-    import pdb; pdb.set_trace()
 
     # read json data
     with open(args.recog_json, 'rb') as f:

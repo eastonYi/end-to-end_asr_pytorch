@@ -464,15 +464,10 @@ class Decoder_CIF(Decoder):
                     # will be (2 x beam) hyps at most
                     hyps_best_kept.append(new_hyp)
 
-
-
             hyps = sorted(hyps_best_kept,
                           key=lambda x: x['score'],
                           reverse=True)[:beam]
 
-            for hyp in hyps:
-                print('hypo: ' + ''.join([char_list[int(x)]
-                                          for x in hyp['yseq'][0, 1:]]))
         # end for i in range(maxlen)
         nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
         # compitable with LAS implementation
@@ -480,7 +475,6 @@ class Decoder_CIF(Decoder):
             hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
-
 
 
 class DecoderLayer(nn.Module):
