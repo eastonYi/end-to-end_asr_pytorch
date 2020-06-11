@@ -1,5 +1,5 @@
 # Speech Transformer (Pytorch)
-The implementation is based on ![Speech Transformer: End-to-End ASR with Transformer](https://github.com/kaituoxu/Speech-Transformer).
+The implementation is based on [Speech Transformer: End-to-End ASR with Transformer](https://github.com/kaituoxu/Speech-Transformer).
 A PyTorch implementation of Speech Transformer network, which directly converts acoustic features to character sequence using a single nueral network.
 This work is mainly done in Kuaishou as an intern.
 
@@ -8,7 +8,6 @@ This work is mainly done in Kuaishou as an intern.
 - PyTorch 1.5
 - [Kaldi](https://github.com/kaldi-asr/kaldi) (just for feature extraction)
 - `pip install -r requirements.txt`
-- `cd tools; make KALDI=/path/to/kaldi`
 
 ## Usage
 ### Quick start
@@ -49,15 +48,18 @@ $ bash run.sh --continue_from <model-path>
 | :---: | :-: | :----: |
 | LSTMP | 9.85| 4x(1024-512). See [kaldi-ktnet1](https://github.com/kaituoxu/kaldi-ktnet1/blob/ktnet1/egs/aishell/s5/local/nnet1/run_4lstm.sh)|
 | Listen, Attend and Spell | 13.2 | See [Listen-Attend-Spell](https://github.com/kaituoxu/Listen-Attend-Spell)'s egs/aishell/run.sh |
-| SpeechTransformer | 12.8 | See egs/aishell/run.sh |
+| SpeechTransformer | 10.7 | See egs/aishell/run.sh |
 
-| SPKR   | #Snt | #Wrd | Corr  |  Sub  |  Del  | Ins  |  Err | S.Err |
-| :---: | :-: | :----: |:----: |:----: |:----: |:----: |:----: |:----: |
-| Sum/Avg| 7176 | 104765 | 89.6  |  9.9  |  0.4  |  0.3  | 10.7 |  57.0 |
+| Model | #Snt | #Wrd |   Sub  |  Del  | Ins  |  CER |
+| :---: | :-: | :----: |:----: |:----: |:----: | :----: |
+| SpeechTransformer |  7176 | 104765 | 9.9  |  0.4  |  0.3  | 10.7 |
+| Conv_CTC_Transformer |  7176 | 104765 | |
+| Conv_CTC |  7176 | 104765 | |
+| CIF | 7176 | 104765 | 13.5 | 0.27 | 3.5 | 17.25 |
 
 ## Acknowledgement
-- The framework and speech-transofrmer baseline is based on ![Speech Transformer: End-to-End ASR with Transformer](https://github.com/kaituoxu/Speech-Transformer)
-- `src/transformer/conv_encoder.py` is refer to https://github.com/by2101/OpenASR.
+- The framework and speech-transofrmer baseline is based on [Speech Transformer: End-to-End ASR with Transformer](https://github.com/kaituoxu/Speech-Transformer)
+- `src/transformer/conv_encoder.py` refers to https://github.com/by2101/OpenASR.
 - The core implement of CIF algorithm is checked by Linhao Dong (the origin author of CIF)
 
 

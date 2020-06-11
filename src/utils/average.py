@@ -7,7 +7,7 @@ def main(dir_model, num):
     files = []
     for r, d, f in os.walk(dir_model):
         for file in f:
-            if 'pth.tar' in file and 'avg' not in file:
+            if 'model' in file and 'avg' not in file:
                 files.append(os.path.join(r, file))
 
     files.sort()
@@ -30,7 +30,7 @@ def main(dir_model, num):
         if avg[k] is not None:
             avg[k] /= num
 
-    save_path = os.path.join(dir_model, 'avg.pth.tar')
+    save_path = os.path.join(dir_model, 'avg.model')
     torch.save(avg, save_path)
     print('save avg model', save_path)
 
