@@ -39,17 +39,20 @@ parser.add_argument('--decode-max-len', default=0, type=int,
 
 def test(args):
     if args.structure == 'transformer':
-        from transformer.Transformer import Transformer
+        from transformer.Transformer import Transformer as Model
     elif args.structure == 'transformer-ctc':
-        from transformer.Transformer import CTC_Transformer as Transformer
+        from transformer.Transformer import CTC_Transformer as Model
     elif args.structure == 'conv-transformer-ctc':
-        from transformer.Transformer import Conv_CTC_Transformer as Transformer
+        from transformer.Transformer import Conv_CTC_Transformer as Model
+    elif args.structure == 'cif':
+        from transformer.CIF_Model import CIF_Model as Model
 
-    model, LFR_m, LFR_n = Transformer.load_model(args.model_path)
+    model, LFR_m, LFR_n = Model.load_model(args.model_path)
     print(model)
     model.eval()
     model.cuda()
     token2idx, idx2token = load_vocab(args.vocab)
+    import pdb; pdb.set_trace()
 
     # read json data
     with open(args.recog_json, 'rb') as f:

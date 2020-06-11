@@ -41,7 +41,7 @@ num_conv_layers=3
 
 # Encoder
 d_input=80
-n_layers_enc=6
+n_layers_enc=15
 n_head=4
 d_k=64
 d_v=64
@@ -56,7 +56,7 @@ num_assigner_layers=3
 
 # Decoder
 d_word_vec=512
-n_layers_dec=6
+n_layers_dec=2
 
 # Loss
 label_smoothing=0.1
@@ -105,7 +105,7 @@ if [ $stage = 'test' ];then
     echo "stage 4: Decoding"
     mkdir -p ${decode_dir}
     export PYTHONWARNINGS="ignore"
-    CUDA_VISIBLE_DEVICES=1 python $model_src/infer.py \
+    CUDA_VISIBLE_DEVICES=${gpu_id} python $model_src/infer.py \
             --type ${stage} \
             --recog-json ${feat_test_dir}/data.json \
             --vocab $vocab \

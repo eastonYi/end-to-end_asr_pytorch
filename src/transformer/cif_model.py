@@ -111,8 +111,8 @@ class CIF_Model(nn.Module):
         Returns:
             nbest_hyps:
         """
-        conv_padded_outputs, input_length = self.conv_encoder(input, input_length)
-        encoder_outputs, *_ = self.encoder(input.unsqueeze(0), input_length)
+        conv_padded_outputs, input_length = self.conv_encoder(input.unsqueeze(0), input_length)
+        encoder_outputs, *_ = self.encoder(conv_padded_outputs, input_length)
         alpha = self.assigner(encoder_outputs, input_length)
 
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
@@ -131,15 +131,9 @@ class CIF_Model(nn.Module):
     @classmethod
     def load_model_from_package(cls, package):
         conv_encoder = Conv_Encoder(
-                        package['d_input'],
-                        package['n_layers_enc'],
-                        package['n_head'],
-                        package['d_k'],
-                        package['d_v'],
+                        package['d_conv_input'],
                         package['d_model'],
-                        package['d_inner'],
-                        dropout=package['dropout'],
-                        pe_maxlen=package['pe_maxlen'])
+                        package['num_assigner_layers'])
         encoder = Encoder(
                         package['d_input'],
                         package['n_layers_enc'],

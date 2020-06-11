@@ -94,7 +94,7 @@ class Transformer_CTC_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | Loss {:.3f}|{:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
+                print('Epoch {} | Iter {} | ctc {:.3f} | ce {:.3f}  | lr {:.3e} | {:.1f} ms/batch | step {}'.
                       format(epoch + 1, i + 1, ctc_loss.item(), ce_loss.item(),
                              self.optimizer.optimizer.param_groups[0]["lr"],
                              1000 * (time.time() - start) / (i + 1),

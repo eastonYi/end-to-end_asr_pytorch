@@ -409,14 +409,13 @@ class Decoder_CIF(Decoder):
 
         # -- Forward
         target_emb = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
-        dec_output = self.input_affine(torch.cat([encoded_attentioned[:, :t, :], target_emb], -1))
+        dec_output = self.input_affine(torch.cat([encoded_attentioned[:, :t+1, :], target_emb], -1))
 
         for dec_layer in self.layer_stack:
-            dec_output, _, _ = dec_layer(
-                dec_output, encoded_attentioned,
+            dec_output, *_ = dec_layer(
+                dec_output,
                 non_pad_mask=non_pad_mask,
-                slf_attn_mask=slf_attn_mask,
-                dec_enc_attn_mask=None)
+                slf_attn_mask=slf_attn_mask)
 
         seq_logit = self.tgt_word_prj(dec_output[:, -1])
 
@@ -440,7 +439,7 @@ class Decoder_CIF(Decoder):
         maxlen = encoded_attentioned.size(1)
 
         # prepare sos
-        ys = torch.ones(1, 1).fill_(self.sos_id).int()
+        ys = torch.ones(1, 1).fill_(self.sos_id).long().cuda
 
         # yseq: 1xT
         hyp = {'score': 0.0, 'yseq': ys}
@@ -459,11 +458,13 @@ class Decoder_CIF(Decoder):
                 for j in range(beam):
                     new_hyp = {}
                     new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
-                    new_hyp['yseq'] = torch.ones(1, (1 + ys.size(1))).int()
+                    new_hyp['yseq'] = torch.ones(1, (1 + ys.size(1))).long().cuda()
                     new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
                     new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
                     # will be (2 x beam) hyps at most
                     hyps_best_kept.append(new_hyp)
+
+
 
             hyps = sorted(hyps_best_kept,
                           key=lambda x: x['score'],
