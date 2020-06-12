@@ -439,7 +439,7 @@ class Decoder_CIF(Decoder):
         maxlen = encoded_attentioned.size(1)
 
         # prepare sos
-        ys = torch.ones(1, 1).fill_(self.sos_id).long().cuda
+        ys = torch.ones(1, 1).fill_(self.sos_id).long().cuda()
 
         # yseq: 1xT
         hyp = {'score': 0.0, 'yseq': ys}
@@ -470,9 +470,11 @@ class Decoder_CIF(Decoder):
 
         # end for i in range(maxlen)
         nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
+
         # compitable with LAS implementation
         for hyp in nbest_hyps:
             hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+            print('hypo: ' + ''.join([char_list[int(x)] for x in hyp['yseq'][1:]]))
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 

@@ -198,7 +198,8 @@ def main(args):
         from transformer.CIF_Model import CIF_Model
         from transformer.solver import CIF_Solver as Solver
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m,
+                                       args.d_model,
                                        n_layers=args.n_conv_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,

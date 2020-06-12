@@ -112,7 +112,8 @@ class CIF_Model(nn.Module):
             nbest_hyps:
         """
         conv_padded_outputs, input_length = self.conv_encoder(input.unsqueeze(0), input_length)
-        encoder_outputs, *_ = self.encoder(conv_padded_outputs, input_length)
+        encoder_outputs = self.encoder(conv_padded_outputs, input_length)
+
         alpha = self.assigner(encoder_outputs, input_length)
 
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
@@ -126,6 +127,7 @@ class CIF_Model(nn.Module):
         # Load to CPU
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model, LFR_m, LFR_n = cls.load_model_from_package(package)
+
         return model, LFR_m, LFR_n
 
     @classmethod
@@ -133,7 +135,7 @@ class CIF_Model(nn.Module):
         conv_encoder = Conv_Encoder(
                         package['d_conv_input'],
                         package['d_model'],
-                        package['num_assigner_layers'])
+                        package['n_conv_layers'])
         encoder = Encoder(
                         package['d_model'],
                         package['n_layers_enc'],
@@ -148,7 +150,7 @@ class CIF_Model(nn.Module):
                         package['d_model'],
                         package['d_model'],
                         package['w_context'],
-                        package['num_assigner_layers'])
+                        package['n_assigner_layers'])
         decoder = Decoder(
                         package['sos_id'],
                         package['vocab_size'],
@@ -176,6 +178,7 @@ class CIF_Model(nn.Module):
             'LFR_n': LFR_n,
             # encoder
             'd_conv_input': model.conv_encoder.d_input,
+            'n_conv_layers': model.conv_encoder.n_layers,
             'n_layers_enc': model.encoder.n_layers,
             'n_head': model.encoder.n_head,
             'd_k': model.encoder.d_k,
@@ -186,7 +189,7 @@ class CIF_Model(nn.Module):
             'pe_maxlen': model.encoder.pe_maxlen,
             # assigner
             'w_context': model.assigner.w_context,
-            'num_assigner_layers': model.assigner.n_layers,
+            'n_assigner_layers': model.assigner.n_layers,
             # decoder
             'sos_id': model.decoder.sos_id,
             'vocab_size': model.decoder.n_tgt_vocab,
