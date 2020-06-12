@@ -78,6 +78,7 @@ if [ $stage = 'train' ];then
             --LFR_n ${LFR_n} \
             --d_input $d_input \
             --n_layers_enc $n_layers_enc \
+            --num_assigner_layers $num_assigner_layers \
             --n_head $n_head \
             --d_k $d_k \
             --d_v $d_v \

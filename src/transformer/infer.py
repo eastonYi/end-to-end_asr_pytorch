@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 import argparse
 import json
-import os
-import time
 import torch
 import kaldi_io
 
-from utils.utils import load_vocab, ids2str, add_results_to_json
+from utils.utils import load_vocab, ids2str
 from utils.data import build_LFR_features
+
 
 parser = argparse.ArgumentParser(
     "End-to-End Automatic Speech Recognition Decoding.")
@@ -57,8 +56,6 @@ def test(args):
     with open(args.recog_json, 'rb') as f:
         js = json.load(f)['utts']
 
-    new_js = {}
-
     # decode each utterance
     with torch.no_grad(), open(args.output, 'w') as f:
         for idx, name in enumerate(js.keys(), 1):
@@ -73,11 +70,6 @@ def test(args):
             hyps_ints = model.recognize(input, input_length, idx2token, args)
             hyp = ids2str(hyps_ints, idx2token)[0]
             f.write(name + ' ' + hyp + '\n')
-    #         new_js[name] = add_results_to_json(js[name], hyps_ints, idx2token)
-    #
-    # with open(args.output, 'wb') as f:
-    #     f.write(json.dumps({'utts': new_js}, indent=4,
-    #                        sort_keys=True).encode('utf_8'))
 
 
 def infer(args):

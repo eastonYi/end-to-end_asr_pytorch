@@ -26,7 +26,7 @@ parser.add_argument('--LFR_n', default=3, type=int,
 # Network architecture
 
 # conv_encoder
-parser.add_argument('--num_conv_layers', default=3, type=int,
+parser.add_argument('--n_conv_layers', default=3, type=int,
                     help='Dimension of key')
 # encoder
 # TODO: automatically infer input dim
@@ -51,9 +51,9 @@ parser.add_argument('--dropout', default=0.1, type=float,
 parser.add_argument('--pe_maxlen', default=5000, type=int,
                     help='Positional Encoding max len')
 # assigner
-parser.add_argument('--context_width', default=3, type=int,
+parser.add_argument('--w_context', default=3, type=int,
                     help='Positional Encoding max len')
-parser.add_argument('--num_assigner_layers', default=3, type=int,
+parser.add_argument('--n_assigner_layers', default=3, type=int,
                     help='Positional Encoding max len')
 # decoder
 parser.add_argument('--d_word_vec', default=512, type=int,
@@ -178,7 +178,7 @@ def main(args):
         from transformer.conv_encoder import Conv2dSubsample
 
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
-                                       layer_num=args.num_conv_layers)
+                                       n_layers=args.n_conv_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
@@ -199,13 +199,13 @@ def main(args):
         from transformer.solver import CIF_Solver as Solver
 
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
-                                       layer_num=args.num_conv_layers)
+                                       n_layers=args.n_conv_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
         assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
-                                      context_width=args.context_width,
-                                      layer_num=args.num_assigner_layers)
+                                      w_context=args.w_context,
+                                      n_layers=args.n_assigner_layers)
         decoder = Decoder(sos_id, vocab_size, args.d_word_vec, args.n_layers_dec,
                           args.n_head, args.d_k, args.d_v, args.d_model,
                           args.d_inner, dropout=args.dropout,

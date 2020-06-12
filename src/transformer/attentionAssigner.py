@@ -9,15 +9,15 @@ class Attention_Assigner(nn.Module):
     """atteniton assigner of CIF including self-attention and feed forward.
     """
 
-    def __init__(self, d_input, d_hidden, context_width, layer_num, dropout=0.1):
+    def __init__(self, d_input, d_hidden, w_context, n_layers, dropout=0.1):
         super().__init__()
         # parameters
         self.d_input = d_input
         self.d_hidden = d_hidden
-        self.layer_num = layer_num
-        self.context_width = context_width
+        self.n_layers = n_layers
+        self.w_context = w_context
 
-        self.conv = Conv1d(d_input, d_hidden, layer_num, context_width,
+        self.conv = Conv1d(d_input, d_hidden, n_layers, w_context,
                            pad='same', name='assigner')
         self.linear = nn.Linear(d_hidden, 1)
 

@@ -17,7 +17,7 @@ class CIF_Model(nn.Module):
         self.encoder = encoder
         self.assigner = assigner
         self.decoder = decoder
-        self.ctc_fc = nn.Linear(encoder.dim_output, decoder.dim_output, bias=False)
+        self.ctc_fc = nn.Linear(encoder.d_output, decoder.d_output, bias=False)
 
         for p in self.parameters():
             if p.dim() > 1:
@@ -31,7 +31,7 @@ class CIF_Model(nn.Module):
             padded_targets: N x To
         """
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
-        encoder_outputs, *_ = self.encoder(conv_outputs, len_sequence)
+        encoder_outputs = self.encoder(conv_outputs, len_sequence)
 
         ctc_logits = self.ctc_fc(encoder_outputs)
         len_ctc_logits = len_sequence
@@ -135,7 +135,7 @@ class CIF_Model(nn.Module):
                         package['d_model'],
                         package['num_assigner_layers'])
         encoder = Encoder(
-                        package['d_input'],
+                        package['d_model'],
                         package['n_layers_enc'],
                         package['n_head'],
                         package['d_k'],
@@ -147,7 +147,7 @@ class CIF_Model(nn.Module):
         assigner = Attention_Assigner(
                         package['d_model'],
                         package['d_model'],
-                        package['context_width'],
+                        package['w_context'],
                         package['num_assigner_layers'])
         decoder = Decoder(
                         package['sos_id'],
@@ -165,6 +165,7 @@ class CIF_Model(nn.Module):
         model = cls(conv_encoder, encoder, assigner, decoder)
         model.load_state_dict(package['state_dict'])
         LFR_m, LFR_n = package['LFR_m'], package['LFR_n']
+
         return model, LFR_m, LFR_n
 
     @staticmethod
@@ -174,7 +175,7 @@ class CIF_Model(nn.Module):
             'LFR_m': LFR_m,
             'LFR_n': LFR_n,
             # encoder
-            'd_input': model.encoder.d_input,
+            'd_conv_input': model.conv_encoder.d_input,
             'n_layers_enc': model.encoder.n_layers,
             'n_head': model.encoder.n_head,
             'd_k': model.encoder.d_k,
@@ -184,8 +185,8 @@ class CIF_Model(nn.Module):
             'dropout': model.encoder.dropout_rate,
             'pe_maxlen': model.encoder.pe_maxlen,
             # assigner
-            'context_width': model.assigner.context_width,
-            'num_assigner_layers': model.assigner.layer_num,
+            'w_context': model.assigner.w_context,
+            'num_assigner_layers': model.assigner.n_layers,
             # decoder
             'sos_id': model.decoder.sos_id,
             'vocab_size': model.decoder.n_tgt_vocab,
