@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from conv_encoder import Conv2dSubsample as Conv_Encoder
-from decoder import Decoder_CIF as Decoder
-from encoder import Encoder
-from attentionAssigner import Attention_Assigner
+from transformer.conv_encoder import Conv2dSubsample
+from transformer.encoder import Encoder
+from transformer.attentionAssigner import Attention_Assigner
+from transformer.decoder import Decoder_CIF as Decoder
 
 
 class CIF_Model(nn.Module):
@@ -123,80 +123,32 @@ class CIF_Model(nn.Module):
         return nbest_hyps
 
     @classmethod
-    def load_model(cls, path):
-        # Load to CPU
+    def load_model(cls, path, args):
+        # creat mdoel
+        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+                                       n_layers=args.n_conv_layers)
+        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
+                          args.d_k, args.d_v, args.d_model, args.d_inner,
+                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
+                                      w_context=args.w_context,
+                                      n_layers=args.n_assigner_layers)
+        decoder = Decoder(args.sos_id, args.vocab_size, args.d_word_vec, args.n_layers_dec,
+                          args.n_head, args.d_k, args.d_v, args.d_model,
+                          args.d_inner, dropout=args.dropout,
+                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
+                          pe_maxlen=args.pe_maxlen)
+        model = CIF_Model(conv_encoder, encoder, assigner, decoder)
+
+        # load params
         package = torch.load(path, map_location=lambda storage, loc: storage)
-        model, LFR_m, LFR_n = cls.load_model_from_package(package)
-
-        return model, LFR_m, LFR_n
-
-    @classmethod
-    def load_model_from_package(cls, package):
-        conv_encoder = Conv_Encoder(
-                        package['d_conv_input'],
-                        package['d_model'],
-                        package['n_conv_layers'])
-        encoder = Encoder(
-                        package['d_model'],
-                        package['n_layers_enc'],
-                        package['n_head'],
-                        package['d_k'],
-                        package['d_v'],
-                        package['d_model'],
-                        package['d_inner'],
-                        dropout=package['dropout'],
-                        pe_maxlen=package['pe_maxlen'])
-        assigner = Attention_Assigner(
-                        package['d_model'],
-                        package['d_model'],
-                        package['w_context'],
-                        package['n_assigner_layers'])
-        decoder = Decoder(
-                        package['sos_id'],
-                        package['vocab_size'],
-                        package['d_word_vec'],
-                        package['n_layers_dec'],
-                        package['n_head'],
-                        package['d_k'],
-                        package['d_v'],
-                        package['d_model'],
-                        package['d_inner'],
-                        dropout=package['dropout'],
-                        tgt_emb_prj_weight_sharing=package['tgt_emb_prj_weight_sharing'],
-                        pe_maxlen=package['pe_maxlen'])
-        model = cls(conv_encoder, encoder, assigner, decoder)
         model.load_state_dict(package['state_dict'])
-        LFR_m, LFR_n = package['LFR_m'], package['LFR_n']
 
-        return model, LFR_m, LFR_n
+        return model
 
     @staticmethod
     def serialize(model, optimizer, epoch, LFR_m, LFR_n, tr_loss=None, cv_loss=None):
         package = {
-            # Low Frame Rate Feature
-            'LFR_m': LFR_m,
-            'LFR_n': LFR_n,
-            # encoder
-            'd_conv_input': model.conv_encoder.d_input,
-            'n_conv_layers': model.conv_encoder.n_layers,
-            'n_layers_enc': model.encoder.n_layers,
-            'n_head': model.encoder.n_head,
-            'd_k': model.encoder.d_k,
-            'd_v': model.encoder.d_v,
-            'd_model': model.encoder.d_model,
-            'd_inner': model.encoder.d_inner,
-            'dropout': model.encoder.dropout_rate,
-            'pe_maxlen': model.encoder.pe_maxlen,
-            # assigner
-            'w_context': model.assigner.w_context,
-            'n_assigner_layers': model.assigner.n_layers,
-            # decoder
-            'sos_id': model.decoder.sos_id,
-            'vocab_size': model.decoder.n_tgt_vocab,
-            'd_word_vec': model.decoder.d_word_vec,
-            'n_layers_dec': model.decoder.n_layers,
-            'tgt_emb_prj_weight_sharing': model.decoder.tgt_emb_prj_weight_sharing,
-            # state
             'state_dict': model.state_dict(),
             'optim_dict': optimizer.state_dict(),
             'epoch': epoch
@@ -204,4 +156,5 @@ class CIF_Model(nn.Module):
         if tr_loss is not None:
             package['tr_loss'] = tr_loss
             package['cv_loss'] = cv_loss
+
         return package

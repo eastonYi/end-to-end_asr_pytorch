@@ -348,7 +348,7 @@ class Decoder_CIF(Decoder):
             for _ in range(n_layers)])
         self.input_affine = nn.Linear(2*d_model, d_model, bias=False)
 
-        self.tgt_word_prj = nn.Linear(d_model, n_tgt_vocab, bias=False)
+        self.tgt_word_prj = nn.Linear(2*d_model, n_tgt_vocab, bias=False)
         nn.init.xavier_normal_(self.tgt_word_prj.weight)
 
         if tgt_emb_prj_weight_sharing:
@@ -398,6 +398,8 @@ class Decoder_CIF(Decoder):
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask)
 
+        dec_output = torch.cat([encoded_attentioned, dec_output], -1)
+
         logits = self.tgt_word_prj(dec_output)
 
         return logits
@@ -416,6 +418,8 @@ class Decoder_CIF(Decoder):
                 dec_output,
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask)
+
+        dec_output = torch.cat([encoded_attentioned[:, :t+1, :], dec_output], -1)
 
         seq_logit = self.tgt_word_prj(dec_output[:, -1])
 

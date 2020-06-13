@@ -60,7 +60,7 @@ parser.add_argument('--d_word_vec', default=512, type=int,
                     help='Dim of decoder embedding')
 parser.add_argument('--n_layers_dec', default=6, type=int,
                     help='Number of decoder stacks')
-parser.add_argument('--tgt_emb_prj_weight_sharing', default=1, type=int,
+parser.add_argument('--tgt_emb_prj_weight_sharing', default=0, type=int,
                     help='share decoder embedding with decoder projection')
 # Loss
 parser.add_argument('--label_smoothing', default=0.1, type=float,

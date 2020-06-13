@@ -2,21 +2,21 @@
 SRC_ROOT=$PWD/../../src
 export PYTHONPATH=$SRC_ROOT:$PYTHONPATH
 
-gpu_id=0
-stage='train'
+gpu_id=2
+stage='test'
 
 structure='cif'
 model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
 vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
-expdir=exp/cif # tag for managing experiments.
+expdir=exp/cif_4 # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 model=last.model
 # Training config
 epochs=100
 continue=0
 print_freq=100
-batch_frames=15000
+batch_frames=60000
 maxlen_in=800
 maxlen_out=150
 
@@ -37,12 +37,12 @@ LFR_n=1  # Low Frame Rate: number of frames to skip
 
 # Network architecture
 # Conv encoder
-num_conv_layers=3
+n_conv_layers=3
 
 # Encoder
 d_input=80
-n_layers_enc=15
-n_head=4
+n_layers_enc=6
+n_head=8
 d_k=64
 d_v=64
 d_model=512
@@ -52,11 +52,11 @@ pe_maxlen=5000
 
 # assigner
 context_width=3
-num_assigner_layers=3
+n_assigner_layers=1
 
 # Decoder
 d_word_vec=512
-n_layers_dec=2
+n_layers_dec=6
 
 # Loss
 label_smoothing=0.1
@@ -77,8 +77,9 @@ if [ $stage = 'train' ];then
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
             --d_input $d_input \
+            --n_conv_layers $n_conv_layers \
             --n_layers_enc $n_layers_enc \
-            --num_assigner_layers $num_assigner_layers \
+            --n_assigner_layers $n_assigner_layers \
             --n_head $n_head \
             --d_k $d_k \
             --d_v $d_v \
@@ -111,8 +112,23 @@ if [ $stage = 'test' ];then
             --recog-json ${feat_test_dir}/data.json \
             --vocab $vocab \
             --structure ${structure} \
-            --output ${decode_dir}/hyp \
+            --LFR_m ${LFR_m} \
+            --LFR_n ${LFR_n} \
+            --d_input $d_input \
+            --n_conv_layers $n_conv_layers \
+            --n_layers_enc $n_layers_enc \
+            --n_assigner_layers $n_assigner_layers \
+            --n_head $n_head \
+            --d_k $d_k \
+            --d_v $d_v \
+            --d_model $d_model \
+            --d_inner $d_inner \
+            --dropout $dropout \
+            --pe_maxlen $pe_maxlen \
+            --d_word_vec $d_word_vec \
+            --n_layers_dec $n_layers_dec \
             --model-path ${expdir}/${model} \
+            --output ${decode_dir}/hyp \
             --beam-size $beam_size \
             --nbest $nbest \
             --decode-max-len $decode_max_len
