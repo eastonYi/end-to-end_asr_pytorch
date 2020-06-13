@@ -6,7 +6,7 @@ from transformer.encoder import EncoderLayer
 from transformer.attention import MultiHeadAttention
 from transformer.module import PositionalEncoding, PositionwiseFeedForward
 from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, \
-                get_non_pad_mask, get_subsequent_mask, pad_list
+                sequence_mask, get_subsequent_mask, pad_list
 
 
 class Decoder(nn.Module):
@@ -72,8 +72,7 @@ class Decoder(nn.Module):
 
         return ys_in_pad, ys_out_pad
 
-    def forward(self, targets, encoder_padded_outputs,
-                encoder_input_lengths, return_attns=False):
+    def forward(self, targets, encoder_padded_outputs, encoder_input_lengths):
         """
         Args:
             padded_input: N x To
@@ -81,13 +80,11 @@ class Decoder(nn.Module):
 
         Returns:
         """
-        dec_slf_attn_list, dec_enc_attn_list = [], []
-
         # Get Deocder Input and Output
         targets_sos, targets_eos = self.preprocess(targets)
 
         # Prepare masks
-        non_pad_mask = get_non_pad_mask(targets_sos, pad_idx=0)
+        non_pad_mask = (targets_sos > 0).unsqueeze(-1)
 
         slf_attn_mask_subseq = get_subsequent_mask(targets_sos)
         slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=targets_sos,
@@ -95,9 +92,7 @@ class Decoder(nn.Module):
                                                      pad_idx=0)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
         output_length = targets_sos.size(1)
-        dec_enc_attn_mask = get_attn_pad_mask(encoder_padded_outputs,
-                                              encoder_input_lengths,
-                                              output_length)
+        dec_enc_attn_mask = get_attn_pad_mask(encoder_input_lengths, output_length)
 
         # Forward
         dec_output = self.dropout(self.tgt_word_emb(targets_sos) * self.x_logit_scale +
@@ -110,15 +105,8 @@ class Decoder(nn.Module):
                 slf_attn_mask=slf_attn_mask,
                 dec_enc_attn_mask=dec_enc_attn_mask)
 
-            if return_attns:
-                dec_slf_attn_list += [dec_slf_attn]
-                dec_enc_attn_list += [dec_enc_attn]
-
         # before softmax
         logits = self.tgt_word_prj(dec_output)
-
-        if return_attns:
-            return logits, targets_eos, dec_slf_attn_list, dec_enc_attn_list
 
         return logits, targets_eos
 
@@ -380,7 +368,7 @@ class Decoder_CIF(Decoder):
         """
         # Prepare masks
         ys_in = self.preprocess(target)
-        non_pad_mask = get_non_pad_mask(target, pad_idx=0)
+        non_pad_mask = target > 0
 
         slf_attn_mask_subseq = get_subsequent_mask(ys_in)
         slf_attn_mask_keypad = get_attn_key_pad_mask(

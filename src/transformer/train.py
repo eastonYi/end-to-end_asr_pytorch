@@ -112,11 +112,10 @@ parser.add_argument('--visdom-id', default='Transformer training',
 def main(args):
     # Construct Solver
     # data
-    # char_list, sos_id, eos_id = process_dict(args.dict)
     token2idx, idx2token = load_vocab(args.vocab)
-    vocab_size = len(token2idx)
-    sos_id = token2idx['<sos>']
-    eos_id = token2idx['<eos>']
+    args.vocab_size = len(token2idx)
+    args.sos_id = token2idx['<sos>']
+    args.eos_id = token2idx['<eos>']
 
     tr_dataset = AudioDataset(args.train_json, args.batch_size,
                               args.maxlen_in, args.maxlen_out,
@@ -137,81 +136,32 @@ def main(args):
     data = {'tr_loader': tr_loader, 'cv_loader': cv_loader}
 
     if args.structure == 'transformer':
-        from transformer.decoder import Decoder
-        from transformer.encoder import Encoder
         from transformer.Transformer import Transformer
         from transformer.solver import Transformer_Solver as Solver
 
-        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(sos_id, eos_id, vocab_size,
-                          args.d_word_vec, args.n_layers_dec, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        encoder, decoder = Transformer.create_model(args)
         model = Transformer(encoder, decoder)
 
     elif args.structure == 'transformer-ctc':
-        from transformer.decoder import Decoder
-        from transformer.encoder import Encoder
         from transformer.Transformer import CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
 
-        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(sos_id, eos_id, vocab_size,
-                          args.d_word_vec, args.n_layers_dec, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        encoder, decoder = Transformer.create_model(args)
         model = Transformer(encoder, decoder)
 
     elif args.structure == 'conv-transformer-ctc':
-        from transformer.decoder import Decoder
-        from transformer.encoder import Encoder
         from transformer.Transformer import Conv_CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
-        from transformer.conv_encoder import Conv2dSubsample
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
-                                       n_layers=args.n_conv_layers)
-        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(sos_id, eos_id, vocab_size,
-                          args.d_word_vec, args.n_layers_dec, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        conv_encoder, encoder, decoder = Transformer.create_model(args)
         model = Transformer(conv_encoder, encoder, decoder)
 
     elif args.structure == 'cif':
-        from transformer.conv_encoder import Conv2dSubsample
-        from transformer.encoder import Encoder
-        from transformer.attentionAssigner import Attention_Assigner
-        from transformer.decoder import Decoder_CIF as Decoder
+
         from transformer.CIF_Model import CIF_Model
         from transformer.solver import CIF_Solver as Solver
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m,
-                                       args.d_model,
-                                       n_layers=args.n_conv_layers)
-        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
-                                      w_context=args.w_context,
-                                      n_layers=args.n_assigner_layers)
-        decoder = Decoder(sos_id, vocab_size, args.d_word_vec, args.n_layers_dec,
-                          args.n_head, args.d_k, args.d_v, args.d_model,
-                          args.d_inner, dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        conv_encoder, encoder, assigner, decoder = CIF_Model.create_model(args)
         model = CIF_Model(conv_encoder, encoder, assigner, decoder)
 
     print(model)

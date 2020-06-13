@@ -1,11 +1,6 @@
 import torch
 import torch.nn as nn
 
-from transformer.conv_encoder import Conv2dSubsample
-from transformer.encoder import Encoder
-from transformer.attentionAssigner import Attention_Assigner
-from transformer.decoder import Decoder_CIF as Decoder
-
 
 class CIF_Model(nn.Module):
     """An encoder-decoder framework only includes attention.
@@ -123,8 +118,12 @@ class CIF_Model(nn.Module):
         return nbest_hyps
 
     @classmethod
-    def load_model(cls, path, args):
-        # creat mdoel
+    def create_model(cls, args):
+        from transformer.conv_encoder import Conv2dSubsample
+        from transformer.encoder import Encoder
+        from transformer.attentionAssigner import Attention_Assigner
+        from transformer.decoder import Decoder_CIF as Decoder
+
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
                                        n_layers=args.n_conv_layers)
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
@@ -138,8 +137,16 @@ class CIF_Model(nn.Module):
                           args.d_inner, dropout=args.dropout,
                           tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
                           pe_maxlen=args.pe_maxlen)
-        model = CIF_Model(conv_encoder, encoder, assigner, decoder)
 
+        return conv_encoder, encoder, assigner, decoder
+
+    @classmethod
+    def load_model(cls, path, args):
+
+        # creat mdoel
+        conv_encoder, encoder, assigner, decoder = cls.create_model(args)
+        model = cls(conv_encoder, encoder, assigner, decoder)
+        
         # load params
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(package['state_dict'])

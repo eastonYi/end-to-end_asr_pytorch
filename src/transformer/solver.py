@@ -20,14 +20,14 @@ class Transformer_Solver(Solver):
             vis_iters = torch.arange(1, len(data_loader) + 1)
             vis_iters_loss = torch.Tensor(len(data_loader))
 
-        for i, (data) in enumerate(data_loader):
+        for i, data in enumerate(data_loader):
             padded_input, input_lengths, targets = data
             padded_input = padded_input.cuda()
             input_lengths = input_lengths.cuda()
             targets = targets.cuda()
-            pred, gold = self.model(padded_input, input_lengths, targets)
+            logits, targets_eos = self.model(padded_input, input_lengths, targets)
             ce_loss = cal_ce_loss(
-                pred, gold, smoothing=self.label_smoothing)
+                logits, targets_eos, smoothing=self.label_smoothing)
             loss = ce_loss
             if not cross_valid:
                 self.optimizer.zero_grad()

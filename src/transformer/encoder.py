@@ -2,7 +2,7 @@ import torch.nn as nn
 
 from transformer.attention import MultiHeadAttention
 from transformer.module import PositionalEncoding, PositionwiseFeedForward
-from utils.utils import get_non_pad_mask, get_attn_pad_mask
+from utils.utils import sequence_mask, get_attn_pad_mask
 
 
 class Encoder(nn.Module):
@@ -44,9 +44,9 @@ class Encoder(nn.Module):
             enc_output: N x T x H
         """
         # Prepare masks
-        non_pad_mask = get_non_pad_mask(padded_input, input_lengths=input_lengths)
+        non_pad_mask = sequence_mask(input_lengths).unsqueeze(-1)
         length = padded_input.size(1)
-        slf_attn_mask = get_attn_pad_mask(padded_input, input_lengths, length)
+        slf_attn_mask = get_attn_pad_mask(input_lengths, length)
 
         # Forward
         enc_output = self.dropout(
