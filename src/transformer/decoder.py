@@ -99,7 +99,7 @@ class Decoder(nn.Module):
                                   self.positional_encoding(targets_sos))
 
         for dec_layer in self.layer_stack:
-            dec_output, dec_slf_attn, dec_enc_attn = dec_layer(
+            dec_output = dec_layer(
                 dec_output, encoder_padded_outputs,
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask,
@@ -119,7 +119,7 @@ class Decoder(nn.Module):
         dec_output = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
 
         for dec_layer in self.layer_stack:
-            dec_output, _, _ = dec_layer(
+            dec_output = dec_layer(
                 dec_output, encoder_outputs,
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask,
@@ -368,7 +368,7 @@ class Decoder_CIF(Decoder):
         """
         # Prepare masks
         ys_in = self.preprocess(target)
-        non_pad_mask = target > 0
+        non_pad_mask = (target > 0).unsqueeze(-1)
 
         slf_attn_mask_subseq = get_subsequent_mask(ys_in)
         slf_attn_mask_keypad = get_attn_key_pad_mask(
@@ -470,6 +470,85 @@ class Decoder_CIF(Decoder):
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 
+    def step_forward_cache(self, ys, enc_attentioned, dec_cache, t):
+        # -- Forward
+        target_emb = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+        dec_output = self.input_affine(torch.cat([enc_attentioned[:, :t+1, :], target_emb], -1))
+        new_cache = []
+
+        for i, dec_layer in enumerate(self.layer_stack):
+            dec_output = dec_layer.forward_cache(dec_output)
+            dec_output = torch.cat([dec_cache[:, :, i, :], dec_output], axis=1)
+            new_cache.append(dec_output.unsqueeze(2))
+
+        new_cache = torch.cat(new_cache, axis=2)  # [batch_size, n_step, num_blocks, num_hidden]
+
+        dec_output = torch.cat([enc_attentioned[:, :t+1, :], dec_output], -1)
+
+        seq_logit = self.tgt_word_prj(dec_output[:, -1])
+
+        local_scores = F.log_softmax(seq_logit, dim=1)
+
+        return local_scores, new_cache
+
+    def recognize_beam_cache(self, encoded_attentioned, char_list, args):
+        """Beam search, decode one utterence now.
+        Args:
+            encoder_outputs: T x H
+            char_list: list of character
+            args: args.beam
+
+        Returns:
+            nbest_hyps:
+        """
+        # search params
+        beam = args.beam_size
+        nbest = args.nbest
+        maxlen = encoded_attentioned.size(1)
+
+        # prepare sos
+        ys = torch.ones(1, 1).fill_(self.sos_id).long().cuda()
+
+        # yseq: 1xT
+        hyp = {'score': 0.0, 'yseq': ys,
+               'cache': torch.zeros([1, 0, self.n_layers, self.d_model]).cuda()}
+        hyps = [hyp]
+
+        for i in range(maxlen):
+            hyps_best_kept = []
+            for hyp in hyps:
+                ys = hyp['yseq']  # 1 x i
+                local_scores, cache_decoder = self.step_forward_cache(
+                    ys, encoded_attentioned, hyp['cache'], i)
+
+                # topk scores
+                local_best_scores, local_best_ids = torch.topk(
+                    local_scores, beam, dim=1)
+
+                for j in range(beam):
+                    new_hyp = {}
+                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
+                    new_hyp['yseq'] = torch.ones(1, (1 + ys.size(1))).long().cuda()
+                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
+                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
+                    new_hyp['cache'] = cache_decoder
+                    # will be (2 x beam) hyps at most
+                    hyps_best_kept.append(new_hyp)
+
+            hyps = sorted(hyps_best_kept,
+                          key=lambda x: x['score'],
+                          reverse=True)[:beam]
+
+        # end for i in range(maxlen)
+        nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
+
+        # compitable with LAS implementation
+        for hyp in nbest_hyps:
+            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+            print('hypo: ' + ''.join([char_list[int(x)] for x in hyp['yseq'][1:]]))
+
+        return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
+
 
 class DecoderLayer(nn.Module):
     ''' Compose with three layers '''
@@ -492,4 +571,19 @@ class DecoderLayer(nn.Module):
         dec_output = self.pos_ffn(dec_output)
         dec_output *= non_pad_mask
 
-        return dec_output, dec_slf_attn, dec_enc_attn
+        return dec_output
+
+    def forward_cache(self, dec_input, enc_output,
+                      non_pad_mask=None, slf_attn_mask=None, dec_enc_attn_mask=None):
+        dec_output, dec_slf_attn = self.slf_attn(
+            dec_input[:, -1: , :], dec_input, dec_input, mask=slf_attn_mask)
+        dec_output *= non_pad_mask
+
+        dec_output, dec_enc_attn = self.enc_attn(
+            dec_output, enc_output, enc_output, mask=dec_enc_attn_mask)
+        dec_output *= non_pad_mask
+
+        dec_output = self.pos_ffn(dec_output)
+        dec_output *= non_pad_mask
+
+        return dec_output

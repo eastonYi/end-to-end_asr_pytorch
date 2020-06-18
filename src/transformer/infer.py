@@ -114,7 +114,8 @@ def test(args):
             input_length = torch.tensor([input.size(0)], dtype=torch.int)
             input = input.cuda()
             input_length = input_length.cuda()
-            hyps_ints = model.recognize(input, input_length, idx2token, args)
+            # hyps_ints = model.recognize(input, input_length, idx2token, args)
+            hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
             hyp = ids2str(hyps_ints, idx2token)[0]
             f.write(name + ' ' + hyp + '\n')
 

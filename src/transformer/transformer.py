@@ -62,8 +62,7 @@ class Transformer(nn.Module):
 
     @classmethod
     def load_model(cls, path, args):
-        encoder, decoder = cls.create_model(args)
-        model = cls(encoder, decoder)
+        model = cls(*cls.create_model(args))
 
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(package['state_dict'])

@@ -93,58 +93,6 @@ def parse_hypothesis(hyp, char_list):
     return text, token, tokenid, score
 
 
-def ids2str(hyps_ints, idx2token):
-    list_res = []
-    hyp = ''
-    for hyp_ints, length in zip(*hyps_ints):
-        for idx in hyp_ints[:length]:
-            hyp += idx2token[idx]
-        list_res.append(hyp)
-
-    return list_res
-
-
-def add_results_to_json(js, nbest_hyps, char_list):
-    """Function to add N-best results to json
-
-    :param dict js: groundtruth utterance dict
-    :param list nbest_hyps: list of hypothesis
-    :param list char_list: list of characters
-    :return: N-best results added utterance dict
-    """
-    # copy old json info
-    new_js = dict()
-    new_js['utt2spk'] = js['utt2spk']
-    new_js['output'] = []
-
-    for n, hyp in enumerate(nbest_hyps, 1):
-        # parse hypothesis
-        rec_text, rec_token, rec_tokenid, score = parse_hypothesis(
-            hyp, char_list)
-
-        # copy ground-truth
-        out_dic = dict(js['output'][0].items())
-
-        # update name
-        out_dic['name'] += '[%d]' % n
-
-        # add recognition results
-        out_dic['rec_text'] = rec_text
-        out_dic['rec_token'] = rec_token
-        out_dic['rec_tokenid'] = rec_tokenid
-        out_dic['score'] = score
-
-        # add to list of N-best result dicts
-        new_js['output'].append(out_dic)
-
-        # show 1-best result
-        if n == 1:
-            print('groundtruth: %s' % out_dic['text'])
-            print('prediction : %s' % out_dic['rec_text'])
-
-    return new_js
-
-
 # -- Transformer Related --
 import torch
 

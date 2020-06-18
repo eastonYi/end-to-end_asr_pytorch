@@ -113,7 +113,8 @@ class CIF_Model(nn.Module):
 
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
 
-        nbest_hyps = self.decoder.recognize_beam(l, char_list, args)
+        # nbest_hyps = self.decoder.recognize_beam(l, char_list, args)
+        nbest_hyps = self.decoder.recognize_beam_cache(l, char_list, args)
 
         return nbest_hyps
 
@@ -129,7 +130,8 @@ class CIF_Model(nn.Module):
         encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
                           args.d_k, args.d_v, args.d_model, args.d_inner,
                           dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        assigner = Attention_Assigner(d_input=args.d_model, d_hidden=args.d_model,
+        assigner = Attention_Assigner(d_input=args.d_model,
+                                      d_hidden=args.d_assigner_hidden,
                                       w_context=args.w_context,
                                       n_layers=args.n_assigner_layers)
         decoder = Decoder(args.sos_id, args.vocab_size, args.d_word_vec, args.n_layers_dec,
@@ -146,7 +148,7 @@ class CIF_Model(nn.Module):
         # creat mdoel
         conv_encoder, encoder, assigner, decoder = cls.create_model(args)
         model = cls(conv_encoder, encoder, assigner, decoder)
-        
+
         # load params
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(package['state_dict'])
