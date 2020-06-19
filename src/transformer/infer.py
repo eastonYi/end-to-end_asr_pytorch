@@ -56,6 +56,8 @@ parser.add_argument('--pe_maxlen', default=5000, type=int,
 # assigner
 parser.add_argument('--w_context', default=3, type=int,
                     help='Positional Encoding max len')
+parser.add_argument('--d_assigner_hidden', default=512, type=int,
+                    help='Positional Encoding max len')
 parser.add_argument('--n_assigner_layers', default=3, type=int,
                     help='Positional Encoding max len')
 # decoder

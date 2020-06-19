@@ -134,7 +134,7 @@ class CIF_Model(nn.Module):
                                       d_hidden=args.d_assigner_hidden,
                                       w_context=args.w_context,
                                       n_layers=args.n_assigner_layers)
-        decoder = Decoder(args.sos_id, args.vocab_size, args.d_word_vec, args.n_layers_dec,
+        decoder = Decoder(args.sos_id, args.vocab_size, args.d_model, args.n_layers_dec,
                           args.n_head, args.d_k, args.d_v, args.d_model,
                           args.d_inner, dropout=args.dropout,
                           tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
@@ -156,7 +156,7 @@ class CIF_Model(nn.Module):
         return model
 
     @staticmethod
-    def serialize(model, optimizer, epoch, LFR_m, LFR_n, tr_loss=None, cv_loss=None):
+    def serialize(model, optimizer, epoch, tr_loss=None, cv_loss=None):
         package = {
             'state_dict': model.state_dict(),
             'optim_dict': optimizer.state_dict(),

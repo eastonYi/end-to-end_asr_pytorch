@@ -118,6 +118,10 @@ class Transformer_CTC_Solver(Solver):
 
 
 class CIF_Solver(Solver):
+    def __init__(self, data, model, optimizer, args):
+        super().__init__(data, model, optimizer, args)
+        self.lambda_qua = 0.01
+
     def _run_one_epoch(self, epoch, cross_valid=False):
         start = time.time()
         total_loss = 0
@@ -144,7 +148,7 @@ class CIF_Solver(Solver):
                 smoothing=self.label_smoothing)
 
             if not cross_valid:
-                loss = qua_loss + ctc_loss + ce_loss
+                loss = self.lambda_qua * qua_loss + ctc_loss + ce_loss
 
                 self.optimizer.zero_grad()
                 loss.backward()
