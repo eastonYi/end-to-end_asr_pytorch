@@ -38,9 +38,9 @@ class CIF_Model(nn.Module):
         # scaling
         num = (targets > 0).float().sum(-1)
         if random_scale:
-            # random (0, 0.2]
-            num += torch.rand(alpha.size(0)).cuda() / 5.0
-        alpha *= (num / _num)[:, None].repeat(1, alpha.size(1))
+            # random (-0.5, 0.5]
+            num_noise = num + torch.rand(alpha.size(0)).cuda() - 0.5
+        alpha *= (num_noise / _num)[:, None].repeat(1, alpha.size(1))
 
         # cif
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
@@ -87,7 +87,6 @@ class CIF_Model(nn.Module):
         fires = torch.stack(list_fires, 1)
         frames = torch.stack(list_frames, 1)
         list_ls = []
-        # len_labels = (alphas.sum(-1) - 0.001).ceil().int()
         len_labels = torch.round(alphas.sum(-1)).int()
         max_label_len = len_labels.max()
         for b in range(batch_size):
@@ -114,7 +113,6 @@ class CIF_Model(nn.Module):
         encoder_outputs = self.encoder(conv_padded_outputs, input_length)
 
         alpha = self.assigner(encoder_outputs, input_length)
-        # alpha = self.assigner.tail_fixing(alpha
         if target_num:
             _num = alpha.sum(-1)
             num = target_num
@@ -122,8 +120,8 @@ class CIF_Model(nn.Module):
 
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
 
-        # nbest_hyps = self.decoder.recognize_beam(l, char_list, args)
-        nbest_hyps = self.decoder.recognize_beam_cache(l, char_list, args)
+        nbest_hyps = self.decoder.recognize_beam(l, char_list, args)
+        # nbest_hyps = self.decoder.recognize_beam_cache(l, char_list, args)
 
         return nbest_hyps
 
@@ -131,7 +129,8 @@ class CIF_Model(nn.Module):
     def create_model(cls, args):
         from transformer.conv_encoder import Conv2dSubsample
         from transformer.encoder import Encoder
-        from transformer.attentionAssigner import Attention_Assigner
+        # from transformer.attentionAssigner import Attention_Assigner
+        from transformer.attentionAssigner import Attention_Assigner_RNN as Attention_Assigner
         from transformer.decoder import Decoder_CIF as Decoder
 
         conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
