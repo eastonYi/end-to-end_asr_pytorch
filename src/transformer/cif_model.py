@@ -18,7 +18,7 @@ class CIF_Model(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, features, len_features, targets, threshold=0.95):
+    def forward(self, features, len_features, targets, threshold=0.95, random_scale=False):
         """
         Args:
             features: N x T x D
@@ -37,6 +37,9 @@ class CIF_Model(nn.Module):
         _num = alpha.sum(-1)
         # scaling
         num = (targets > 0).float().sum(-1)
+        if random_scale:
+            # random (0, 0.2]
+            num += torch.rand(alpha.size(0)).cuda() / 5.0
         alpha *= (num / _num)[:, None].repeat(1, alpha.size(1))
 
         # cif
@@ -84,7 +87,8 @@ class CIF_Model(nn.Module):
         fires = torch.stack(list_fires, 1)
         frames = torch.stack(list_frames, 1)
         list_ls = []
-        len_labels = (alphas.sum(-1) - 0.001).ceil().int()
+        # len_labels = (alphas.sum(-1) - 0.001).ceil().int()
+        len_labels = torch.round(alphas.sum(-1)).int()
         max_label_len = len_labels.max()
         for b in range(batch_size):
             fire = fires[b, :]
@@ -97,7 +101,7 @@ class CIF_Model(nn.Module):
 
         return torch.stack(list_ls, 0)
 
-    def recognize(self, input, input_length, char_list, args, threshold=0.95):
+    def recognize(self, input, input_length, char_list, args, threshold=0.95, target_num=None):
         """Sequence-to-Sequence beam search, decode one utterence now.
         Args:
             input: T x D
@@ -110,6 +114,11 @@ class CIF_Model(nn.Module):
         encoder_outputs = self.encoder(conv_padded_outputs, input_length)
 
         alpha = self.assigner(encoder_outputs, input_length)
+        # alpha = self.assigner.tail_fixing(alpha
+        if target_num:
+            _num = alpha.sum(-1)
+            num = target_num
+            alpha *= (num / _num)[:, None].repeat(1, alpha.size(1))
 
         l = self.cif(encoder_outputs, alpha, threshold=threshold)
 

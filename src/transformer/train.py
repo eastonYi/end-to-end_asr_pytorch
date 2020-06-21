@@ -57,6 +57,8 @@ parser.add_argument('--d_assigner_hidden', default=512, type=int,
                     help='Positional Encoding max len')
 parser.add_argument('--n_assigner_layers', default=3, type=int,
                     help='Positional Encoding max len')
+parser.add_argument('--random_scale', default=0, type=int,
+                    help='Continue from checkpoint model')
 # decoder
 parser.add_argument('--d_word_vec', default=512, type=int,
                     help='Dim of decoder embedding')

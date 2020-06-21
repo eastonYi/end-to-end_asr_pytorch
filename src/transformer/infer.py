@@ -3,6 +3,7 @@ import argparse
 import json
 import torch
 import kaldi_io
+import time
 
 from utils.utils import load_vocab, ids2str
 from utils.data import build_LFR_features
@@ -105,21 +106,26 @@ def test(args):
     with open(args.recog_json, 'rb') as f:
         js = json.load(f)['utts']
 
+    cur_time = time.time()
     # decode each utterance
     with torch.no_grad(), open(args.output, 'w') as f:
-        for idx, name in enumerate(js.keys(), 1):
-            print('(%d/%d) decoding %s' %
-                  (idx, len(js.keys()), name), flush=True)
-            input = kaldi_io.read_mat(js[name]['input'][0]['feat'])  # TxD
+        for idx, uttid in enumerate(js.keys(), 1):
+            input = kaldi_io.read_mat(js[uttid]['input'][0]['feat'])  # TxD
             input = build_LFR_features(input, args.LFR_m, args.LFR_n)
             input = torch.from_numpy(input).float()
             input_length = torch.tensor([input.size(0)], dtype=torch.int)
             input = input.cuda()
             input_length = input_length.cuda()
-            # hyps_ints = model.recognize(input, input_length, idx2token, args)
-            hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
+            # hyps_ints = model.recognize(input, input_length, idx2token, args,
+            #                             target_num=len(js[uttid]['output']['tokenid'].split()))
+            hyps_ints = model.recognize(input, input_length, idx2token, args)
+            # hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
             hyp = ids2str(hyps_ints, idx2token)[0]
-            f.write(name + ' ' + hyp + '\n')
+            f.write(uttid + ' ' + hyp + '\n')
+            used_time = time.time() - cur_time
+            print('({}/{}) use time {:.2f}s {}: {}'.format(
+                idx, len(js.keys()), used_time, uttid, hyp), flush=True)
+            cur_time = time.time()
 
 
 def infer(args):

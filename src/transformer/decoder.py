@@ -217,92 +217,6 @@ class Decoder(nn.Module):
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 
-    def recognize_batch_beam(self, encoder_outputs, char_list, args):
-        """Batch Beam search.
-        Args:
-            encoder_outputs: B x T x H
-            char_list: list of character
-            args: args.beam
-
-        Returns:
-            nbest_hyps:
-        """
-        # search params
-        beam = args.beam_size
-        batch_size = encoder_outputs.shape[0]
-        nbest = args.nbest
-        if args.decode_max_len == 0:
-            maxlen = encoder_outputs.size(0)
-        else:
-            maxlen = args.decode_max_len
-
-        # prepare sos
-        ys = torch.ones(batch_size, 1).fill_(self.sos_id).type_as(encoder_outputs).long()
-
-        # yseq: 1 x T
-        hyp = {'score': 0.0, 'yseq': ys}
-        hyps = [hyp]
-        ended_hyps = []
-
-        for i in range(maxlen):
-            hyps_best_kept = []
-            for hyp in hyps:
-                ys = hyp['yseq']  # 1 x i
-
-                local_scores = self.step_forward(ys, encoder_outputs)
-
-                # topk scores
-                local_best_scores, local_best_ids = torch.topk(
-                    local_scores, beam, dim=1)
-
-                for j in range(beam):
-                    new_hyp = {}
-                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
-                    new_hyp['yseq'] = torch.ones(1, (1+ys.size(1))).type_as(encoder_outputs).long()
-                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
-                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
-                    # will be (2 x beam) hyps at most
-                    hyps_best_kept.append(new_hyp)
-
-                hyps_best_kept = sorted(hyps_best_kept,
-                                        key=lambda x: x['score'],
-                                        reverse=True)[:beam]
-            # end for hyp in hyps
-            hyps = hyps_best_kept
-
-            # add eos in the final loop to avoid that there are no ended hyps
-            if i == maxlen - 1:
-                for hyp in hyps:
-                    hyp['yseq'] = torch.cat([hyp['yseq'],
-                                             torch.ones(1, 1).fill_(self.eos_id).type_as(encoder_outputs).long()], dim=1)
-
-            # add ended hypothes to a final list, and removed them from current hypothes
-            # (this will be a probmlem, number of hyps < beam)
-            remained_hyps = []
-            for hyp in hyps:
-                if hyp['yseq'][0, -1] == self.eos_id:
-                    ended_hyps.append(hyp)
-                else:
-                    remained_hyps.append(hyp)
-
-            hyps = remained_hyps
-            if len(hyps) > 0:
-                print('remeined hypothes: ' + str(len(hyps)))
-            else:
-                print('no hypothesis. Finish decoding.')
-                break
-
-            for hyp in hyps:
-                print('hypo: ' + ''.join([char_list[int(x)]
-                                          for x in hyp['yseq'][0, 1:]]))
-        # end for i in range(maxlen)
-        nbest_hyps = sorted(ended_hyps, key=lambda x: x['score'], reverse=True)[
-            :min(len(ended_hyps), nbest)]
-        # compitable with LAS implementation
-        for hyp in nbest_hyps:
-            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
-        return nbest_hyps
-
 
 class Decoder_CIF(Decoder):
     """Encoder of Transformer including self-attention and feed forward.
@@ -456,9 +370,7 @@ class Decoder_CIF(Decoder):
                     # will be (2 x beam) hyps at most
                     hyps_best_kept.append(new_hyp)
 
-            hyps = sorted(hyps_best_kept,
-                          key=lambda x: x['score'],
-                          reverse=True)[:beam]
+            hyps = sorted(hyps_best_kept, key=lambda x: x['score'], reverse=True)[:beam]
 
         # end for i in range(maxlen)
         nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
@@ -466,7 +378,7 @@ class Decoder_CIF(Decoder):
         # compitable with LAS implementation
         for hyp in nbest_hyps:
             hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
-            print('hypo: ' + ''.join([char_list[int(x)] for x in hyp['yseq'][1:]]))
+            # print('hypo: ' + ''.join([char_list[int(x)] for x in hyp['yseq'][1:]]))
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 
@@ -512,6 +424,67 @@ class Decoder_CIF(Decoder):
         # yseq: 1xT
         hyp = {'score': 0.0, 'yseq': ys,
                'cache': torch.zeros([1, 0, self.n_layers, self.d_model]).cuda()}
+        hyps = [hyp]
+
+        for i in range(maxlen):
+            hyps_best_kept = []
+            for hyp in hyps:
+                ys = hyp['yseq']  # 1 x i
+                local_scores, cache_decoder = self.step_forward_cache(
+                    ys, encoded_attentioned, hyp['cache'], i)
+
+                # topk scores
+                local_best_scores, local_best_ids = torch.topk(
+                    local_scores, beam, dim=1)
+
+                for j in range(beam):
+                    new_hyp = {}
+                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
+                    new_hyp['yseq'] = torch.ones(1, (1 + ys.size(1))).long().cuda()
+                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
+                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
+                    new_hyp['cache'] = cache_decoder
+                    # will be (2 x beam) hyps at most
+                    hyps_best_kept.append(new_hyp)
+
+            hyps = sorted(hyps_best_kept,
+                          key=lambda x: x['score'],
+                          reverse=True)[:beam]
+
+        # end for i in range(maxlen)
+        nbest_hyps = sorted(hyps, key=lambda x: x['score'], reverse=True)[:min(len(hyps), nbest)]
+
+        # compitable with LAS implementation
+        for hyp in nbest_hyps:
+            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+            print('hypo: ' + ''.join([char_list[int(x)] for x in hyp['yseq'][1:]]))
+
+        return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
+
+
+    def recognize_batch_beam_cache(self, encoded_attentioned, char_list, args):
+        """Beam search, decode one utterence now.
+        Args:
+            encoder_outputs: T x H
+            char_list: list of character
+            args: args.beam
+
+        Returns:
+            nbest_hyps:
+        """
+        # search params
+        batch = encoded_attentioned.size(0)
+        beam = args.beam_size
+        nbest = args.nbest
+        maxlen = encoded_attentioned.size(1)
+
+        # prepare sos
+        ys = torch.ones(batch * beam, 1).fill_(self.sos_id).long().cuda()
+
+        # yseq: 1xT
+        hyp = {'score': 0.0,
+               'yseq': ys,
+               'cache': torch.zeros([batch * beam, 0, self.n_layers, self.d_model]).cuda()}
         hyps = [hyp]
 
         for i in range(maxlen):

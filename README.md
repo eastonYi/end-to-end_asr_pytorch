@@ -55,7 +55,7 @@ $ bash run.sh --continue_from <model-path>
 | SpeechTransformer |  7176 | 104765 | 9.9  |  0.4  |  0.3  | 10.7 |
 | Conv_CTC_Transformer |  7176 | 104765 | |
 | Conv_CTC |  7176 | 104765 | |
-| CIF | 7176 | 104765 | 12.7 | 0.3 | 3.5 | 16.5 |
+| CIF | 7176 | 104765 | 11.8 | 0.45 | 0.28 | 12.53 |
 
 ## Acknowledgement
 - The framework and speech-transofrmer baseline is based on [Speech Transformer: End-to-End ASR with Transformer](https://github.com/kaituoxu/Speech-Transformer)

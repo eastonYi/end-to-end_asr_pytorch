@@ -121,6 +121,7 @@ class CIF_Solver(Solver):
     def __init__(self, data, model, optimizer, args):
         super().__init__(data, model, optimizer, args)
         self.lambda_qua = 0.01
+        self.random_scale = args.random_scale
 
     def _run_one_epoch(self, epoch, cross_valid=False):
         start = time.time()
@@ -142,7 +143,7 @@ class CIF_Solver(Solver):
             input_lengths = input_lengths.cuda()
             targets = targets.cuda()
             logits_ctc, len_logits_ctc, _number, number, logits_ce = \
-                self.model(padded_input, input_lengths, targets)
+                self.model(padded_input, input_lengths, targets, random_scale=self.random_scale)
             qua_loss, ctc_loss, ce_loss = cal_ctc_qua_ce_loss(
                 logits_ctc, len_logits_ctc, _number, number, logits_ce, targets,
                 smoothing=self.label_smoothing)
