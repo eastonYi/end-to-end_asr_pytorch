@@ -32,6 +32,8 @@ parser.add_argument('--n_conv_layers', default=3, type=int,
 # TODO: automatically infer input dim
 parser.add_argument('--structure', type=str, default='transformer',
                     help='transformer transformer-ctc conv-transformer-ctc')
+parser.add_argument('--label_type', type=str, default='token',
+                    help='label_type')
 parser.add_argument('--d_input', default=80, type=int,
                     help='Dim of encoder input (before LFR)')
 parser.add_argument('--n_layers_enc', default=6, type=int,
@@ -129,11 +131,13 @@ def main(args):
                               batch_frames=args.batch_frames)
     tr_loader = AudioDataLoader(tr_dataset, batch_size=1,
                                 token2idx=token2idx,
+                                label_type=args.label_type,
                                 num_workers=args.num_workers,
                                 shuffle=args.shuffle,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     cv_loader = AudioDataLoader(cv_dataset, batch_size=1,
                                 token2idx=token2idx,
+                                label_type=args.label_type,
                                 num_workers=args.num_workers,
                                 LFR_m=args.LFR_m, LFR_n=args.LFR_n)
     # load dictionary and generate char_list, sos_id, eos_id

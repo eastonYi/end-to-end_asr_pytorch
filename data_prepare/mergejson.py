@@ -54,23 +54,33 @@ if __name__ == '__main__':
         dic = old_dic[id]
 
         in_dic = {}
-        if dic.has_key('idim'):
+        try:
             in_dic['shape'] = (int(dic['ilen']), int(dic['idim']))
+        except:
+            pass
         in_dic['name'] = 'input1'
         in_dic['feat'] = dic['feat']
 
         out_dic = {}
         out_dic['name'] = 'target1'
         out_dic['shape'] = (int(dic['olen']), int(dic['odim']))
-        out_dic['text'] = dic['text']
-        out_dic['token'] = dic['token']
-        out_dic['tokenid'] = dic['tokenid']
 
+        try:
+            out_dic['phone'] = dic['phone']
+            out_dic['phone_id'] = dic['phone_id']
+        except:
+            pass
+
+        try:
+            out_dic['text'] = dic['text']
+            out_dic['token'] = dic['token']
+            out_dic['token_id'] = dic['token_id']
+        except:
+            pass
 
         new_dic[id] = {'input':[in_dic], 'output':[out_dic],
             'utt2spk':dic['utt2spk']}
 
-    # ensure "ensure_ascii=False", which is a bug
     jsonstring = json.dumps({'utts': new_dic}, indent=4, ensure_ascii=False, sort_keys=True)
-    
+
     print(jsonstring)

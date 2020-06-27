@@ -9,6 +9,7 @@ Logic:
    AudioDataLoader calls its collate_fn(batch) to process this minibatch.
 """
 import json
+import os
 import numpy as np
 import torch
 import torch.utils.data as data
@@ -32,8 +33,19 @@ class AudioDataset(data.Dataset):
             num_batches: for debug. only use num_batches minibatch but not all.
         """
         super().__init__()
-        with open(data_json_path, 'rb') as f:
-            data = json.load(f)['utts']
+        try:
+            with open(data_json_path, 'rb') as f:
+                data = json.load(f)['utts']
+        except:
+            data = {}
+            for fpathe, _, fs in os.walk(os.path.dirname(data_json_path)):   # os.walk获取所有的目录
+                for f in fs:
+                    if f.endswith('.json'):  # 判断是否是".sfx"结尾
+                        filename = os.path.join(fpathe, f)
+                        with open(filename, 'rb') as f:
+                            data = dict(list(data.items()) +
+                                        list(json.load(f)['utts'].items()))
+
         # sort it by input lengths (long to short)
         sorted_data = sorted(data.items(), key=lambda data: int(
             data[1]['input'][0]['shape'][0]), reverse=True)
@@ -95,24 +107,23 @@ class AudioDataLoader(data.DataLoader):
     NOTE: just use batchsize=1 here, so drop_last=True makes no sense here.
     """
 
-    def __init__(self, *args, token2idx=None, LFR_m=1, LFR_n=1, **kwargs):
+    def __init__(self, *args, token2idx=None, LFR_m=1, LFR_n=1, label_type='token', **kwargs):
         super().__init__(*args, **kwargs)
-        self.collate_fn = LFRCollate(token2idx, LFR_m=LFR_m, LFR_n=LFR_n)
+        self.collate_fn = LFRCollate(token2idx, label_type, LFR_m=LFR_m, LFR_n=LFR_n)
 
 
 class LFRCollate(object):
     """Build this wrapper to pass arguments(LFR_m, LFR_n) to _collate_fn"""
-    def __init__(self, token2idx, LFR_m=1, LFR_n=1):
+    def __init__(self, token2idx, label_type, LFR_m=1, LFR_n=1):
         self.token2idx = token2idx
+        self.label_type = label_type
         self.LFR_m = LFR_m
         self.LFR_n = LFR_n
 
     def __call__(self, batch):
-        return _collate_fn(batch, self.token2idx, LFR_m=self.LFR_m, LFR_n=self.LFR_n)
+        return _collate_fn(batch, self.token2idx, self.label_type, LFR_m=self.LFR_m, LFR_n=self.LFR_n)
 
-
-# From: espnet/src/asr/asr_pytorch.py: CustomConverter:__call__
-def _collate_fn(batch, token2idx, LFR_m=1, LFR_n=1):
+def _collate_fn(batch, token2idx, label_type, LFR_m=1, LFR_n=1):
     """
     Args:
         batch: list, len(batch) = 1. See AudioDataset.__getitem__()
@@ -123,7 +134,8 @@ def _collate_fn(batch, token2idx, LFR_m=1, LFR_n=1):
     """
     # batch should be located in list
     assert len(batch) == 1
-    batch = load_inputs_and_targets(batch[0], token2idx, LFR_m=LFR_m, LFR_n=LFR_n)
+    batch = load_inputs_and_targets(batch[0], token2idx, label_type,
+        LFR_m=LFR_m, LFR_n=LFR_n)
     xs, ys = batch
 
     # TODO: perform subsamping
@@ -140,13 +152,13 @@ def _collate_fn(batch, token2idx, LFR_m=1, LFR_n=1):
 
 
 # ------------------------------ utils ------------------------------------
-def load_inputs_and_targets(batch, token2idx, LFR_m=1, LFR_n=1):
+def load_inputs_and_targets(batch, token2idx, label_type, LFR_m, LFR_n):
     # From: espnet/src/asr/asr_utils.py: load_inputs_and_targets
     # load acoustic features and target sequence of token ids
     # for b in batch:
     #     print(b[1]['input'][0]['feat'])
     xs = [kaldi_io.read_mat(b[1]['input'][0]['feat']) for b in batch]
-    ys = [b[1]['output'][0]['token'].split() for b in batch]
+    ys = [b[1]['output'][0][label_type].split() for b in batch]
 
     if LFR_m != 1 or LFR_n != 1:
         # xs = build_LFR_features(xs, LFR_m, LFR_n)

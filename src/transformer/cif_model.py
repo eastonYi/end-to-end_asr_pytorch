@@ -37,9 +37,7 @@ class CIF_Model(nn.Module):
         _num = alpha.sum(-1)
         # scaling
         num = (targets > 0).float().sum(-1)
-        if random_scale:
-            # random (-0.5, 0.5]
-            num_noise = num + torch.rand(alpha.size(0)).cuda() - 0.5
+        num_noise = num + torch.rand(alpha.size(0)).cuda() - 0.5
         alpha *= (num_noise / _num)[:, None].repeat(1, alpha.size(1))
 
         # cif
