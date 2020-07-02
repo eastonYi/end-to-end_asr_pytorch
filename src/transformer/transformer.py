@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from utils.utils import spec_aug
+
 
 class Transformer(nn.Module):
     """An encoder-decoder framework only includes attention.
@@ -117,13 +119,16 @@ class Conv_CTC_Transformer(CTC_Transformer):
         super().__init__(encoder, decoder)
         self.conv_encoder = conv_encoder
 
-    def forward(self, features, len_features, targets):
+    def forward(self, features, len_features, targets, add_spec_aug=False):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
+        if add_spec_aug:
+            features, len_features = spec_aug(features, len_features, (2, 27, 2, 40))
+
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
         encoder_outputs = self.encoder(conv_outputs, len_sequence)
 

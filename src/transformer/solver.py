@@ -120,7 +120,7 @@ class Transformer_CTC_Solver(Solver):
 class CIF_Solver(Solver):
     def __init__(self, data, model, optimizer, args):
         super().__init__(data, model, optimizer, args)
-        self.lambda_qua = 0.01
+        self.lambda_qua = args.lambda_qua
         self.random_scale = args.random_scale
 
     def _run_one_epoch(self, epoch, cross_valid=False):

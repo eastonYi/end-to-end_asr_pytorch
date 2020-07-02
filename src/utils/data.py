@@ -46,6 +46,14 @@ class AudioDataset(data.Dataset):
                             data = dict(list(data.items()) +
                                         list(json.load(f)['utts'].items()))
 
+        list_to_pop = []
+        for key, sample in data.items():
+            len_x = int(sample['input'][0]['shape'][0])
+            len_y = int(sample['output'][0]['shape'][0])
+            if len_x / len_y < 5.0:
+                list_to_pop.append(key)
+
+        [data.pop(i) for i in list_to_pop]
         # sort it by input lengths (long to short)
         sorted_data = sorted(data.items(), key=lambda data: int(
             data[1]['input'][0]['shape'][0]), reverse=True)

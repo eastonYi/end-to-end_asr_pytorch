@@ -80,16 +80,21 @@ class Solver(object):
             print('-' * 85)
 
             # Save model each epoch
-            if epoch > 10:
-                file_path = os.path.join(
-                    self.save_folder, 'epoch-%d.model' % (epoch + 1))
-                torch.save(self.model.serialize(self.model,
-                                                self.optimizer, epoch + 1,
-                                                self.LFR_m, self.LFR_n,
-                                                tr_loss=self.tr_loss,
-                                                cv_loss=self.cv_loss),
-                           file_path)
-                print('Saving checkpoint model to %s' % file_path)
+            file_path = os.path.join(
+                self.save_folder, 'epoch-%d.model' % (epoch + 1))
+            torch.save(self.model.serialize(self.model,
+                                            self.optimizer, epoch + 1,
+                                            self.LFR_m, self.LFR_n,
+                                            tr_loss=self.tr_loss,
+                                            cv_loss=self.cv_loss),
+                       file_path)
+            print('Saving checkpoint model to %s' % file_path)
+
+            if epoch > 9:
+                file_path = file_path.replace('epoch-%d.model' % (epoch + 1),
+                                              'epoch-%d.model' % (epoch - 10))
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
 
             # Cross validation
             print('Cross validation...')

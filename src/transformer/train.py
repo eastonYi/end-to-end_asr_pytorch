@@ -71,6 +71,8 @@ parser.add_argument('--tgt_emb_prj_weight_sharing', default=0, type=int,
 # Loss
 parser.add_argument('--label_smoothing', default=0.1, type=float,
                     help='label smoothing')
+parser.add_argument('--lambda_qua', default=0.001, type=float,
+                    help='label lambda_qua')
 
 # Training config
 parser.add_argument('--epochs', default=30, type=int,

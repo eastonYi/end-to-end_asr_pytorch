@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from utils.utils import spec_aug
+
 
 class CIF_Model(nn.Module):
     """An encoder-decoder framework only includes attention.
@@ -18,13 +20,18 @@ class CIF_Model(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, features, len_features, targets, threshold=0.95, random_scale=False):
+    def forward(self, features, len_features, targets,
+                threshold=0.95, random_scale=False, add_spec_aug=False):
         """
         Args:
             features: N x T x D
             len_sequence: N
             padded_targets: N x To
         """
+
+        if add_spec_aug:
+            features, len_features = spec_aug(features, len_features, (2, 27, 2, 40))
+
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
         encoder_outputs = self.encoder(conv_outputs, len_sequence)
 

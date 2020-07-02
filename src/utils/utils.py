@@ -138,3 +138,31 @@ def get_attn_pad_mask(input_lengths, expand_length):
     attn_mask = pad_mask.unsqueeze(1).expand(-1, expand_length, -1)
 
     return attn_mask
+
+
+def spec_aug(padded_features, feature_lengths, config):
+    freq_mask_num, freq_mask_width, time_mask_num, time_mask_width = config
+    freq_means = torch.mean(padded_features, dim=-1)
+    time_means = (torch.sum(padded_features, dim=1)
+            /feature_lengths[:, None].float()) # Note that features are padded with zeros.
+
+    B, T, V = padded_features.shape
+    # mask freq
+    for _ in range(time_mask_num):
+        fs = (freq_mask_width * torch.rand(size=[B],
+            device=padded_features.device, requires_grad=False)).long()
+        f0s = ((V-fs).float()*torch.rand(size=[B],
+            device=padded_features.device, requires_grad=False)).long()
+        for b in range(B):
+            padded_features[b, :, f0s[b]:f0s[b]+fs[b]] = freq_means[b][:, None]
+
+    # mask time
+    for _ in range(time_mask_num):
+        ts = (time_mask_width * torch.rand(size=[B],
+            device=padded_features.device, requires_grad=False)).long()
+        t0s = ((feature_lengths-ts).float()*torch.rand(size=[B],
+            device=padded_features.device, requires_grad=False)).long()
+        for b in range(B):
+            padded_features[b, t0s[b]:t0s[b]+ts[b], :] = time_means[b][None, :]
+
+    return padded_features, feature_lengths
