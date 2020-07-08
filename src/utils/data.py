@@ -131,6 +131,7 @@ class LFRCollate(object):
     def __call__(self, batch):
         return _collate_fn(batch, self.token2idx, self.label_type, LFR_m=self.LFR_m, LFR_n=self.LFR_n)
 
+
 def _collate_fn(batch, token2idx, label_type, LFR_m=1, LFR_n=1):
     """
     Args:

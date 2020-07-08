@@ -16,6 +16,7 @@ import argparse
 import logging
 import torch
 
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s')
@@ -35,7 +36,6 @@ if __name__ == "__main__":
     fnckpts.sort()
     fnckpts.reverse()
     fnckpts = fnckpts[:args.num]
-    print(fnckpts)
     logging.info("Average checkpoints:\n{}".format("\n".join(fnckpts)))
     pkg = torch.load(os.path.join(args.expdir, fnckpts[0]), map_location=lambda storage, loc: storage)
     for k in pkg["state_dict"].keys():

@@ -24,11 +24,11 @@ class Transformer(nn.Module):
             input_lengths: N
             padded_targets: N x To
         """
-        encoder_padded_outputs, *_ = self.encoder(padded_input, input_lengths)
+        encoder_padded_outputs = self.encoder(padded_input, input_lengths)
         # pred is score before softmax
-        pred, gold, *_ = self.decoder(padded_target, encoder_padded_outputs,
+        logits, targets_eos = self.decoder(padded_target, encoder_padded_outputs,
                                       input_lengths)
-        return pred, gold
+        return logits, targets_eos
 
     def recognize(self, input, input_length, char_list, args):
         """Sequence-to-Sequence beam search, decode one utterence now.
@@ -101,7 +101,7 @@ class CTC_Transformer(Transformer):
             input_lengths: N
             padded_targets: N x To
         """
-        encoder_padded_outputs, *_ = self.encoder(padded_input, input_lengths)
+        encoder_padded_outputs = self.encoder(padded_input, input_lengths)
         ctc_pred = self.ctc_fc(encoder_padded_outputs)
         ctc_pred_len = input_lengths
         # pred is score before softmax

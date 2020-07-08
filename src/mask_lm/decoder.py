@@ -16,7 +16,7 @@ class Decoder(nn.Module):
         self.tgt_word_prj = nn.Linear(d_input, n_tgt_vocab, bias=False)
         nn.init.xavier_normal_(self.tgt_word_prj.weight)
 
-    def forward(self, encoder_padded_outputs, encoder_input_lengths, masking=True):
+    def forward(self, encoder_padded_outputs, encoder_input_lengths):
         """
         Args:
             padded_input: N x To
@@ -29,12 +29,11 @@ class Decoder(nn.Module):
         # Prepare masks
         mask = sequence_mask(encoder_input_lengths) # B x T
 
-        logits = self.tgt_word_prj(encoder_padded_outputs)
-        if masking:
-            # B x T x V
-            mask = mask.view(mask.shape[0], mask.shape[1], 1).repeat(1, 1, self.dim_output)
-            logits *= mask
+        # B x T x V
+        mask = mask.view(mask.shape[0], mask.shape[1], 1).repeat(1, 1, self.dim_output)
 
+        # before softmax
+        logits = self.tgt_word_prj(encoder_padded_outputs) * mask
         len_logits = encoder_input_lengths
 
         return logits, len_logits
