@@ -62,8 +62,8 @@ if __name__ == '__main__':
         in_dic['feat'] = dic['feat']
 
         out_dic = {}
-        out_dic['name'] = 'target1'
-        out_dic['shape'] = (int(dic['olen']), int(dic['odim']))
+        out_dic['name'] = 'phone'
+        out_dic['shape'] = (int(dic['phone_len']), int(dic['phone_size']))
 
         try:
             out_dic['phone'] = dic['phone']
@@ -73,14 +73,17 @@ if __name__ == '__main__':
 
         try:
             out_dic['text'] = dic['text']
+        except:
+            pass
+
+        try:
             out_dic['token'] = dic['token']
             out_dic['token_id'] = dic['token_id']
         except:
             pass
 
-        new_dic[id] = {'input':[in_dic], 'output':[out_dic],
-            'utt2spk':dic['utt2spk']}
+        new_dic[id] = {'input':[in_dic], 'output':[out_dic]}
 
-    jsonstring = json.dumps({'utts': new_dic}, indent=4, ensure_ascii=False, sort_keys=True)
+    jsonstring = json.dumps({'utts': new_dic}, indent=2, ensure_ascii=False, sort_keys=True)
 
     print(jsonstring)

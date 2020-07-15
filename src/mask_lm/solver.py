@@ -106,7 +106,9 @@ class Mask_LM_Solver(Solver):
 
             if i % self.print_freq == 0:
                 print('Epoch {} | Iter {} | batch [{}, {}] | Loss {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
-                      format(epoch + 1, i + 1, padded_input.size(0), padded_input.size(1), ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
-                      1000 * (time.time() - start) / (i + 1), self.optimizer.step_num))
+                      format(epoch + 1, i + 1, padded_input.size(0), padded_input.size(1),
+                             ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
+                             1000 * (time.time() - start) / (i + 1), self.optimizer.step_num),
+                      flush=True)
 
         return total_loss / (i + 1)

@@ -21,6 +21,9 @@ parser.add_argument('--vocab_src', type=str, required=True,
 parser.add_argument('--vocab_tgt', type=str, required=True,
                     help='Dictionary which should include <unk> <sos> <eos>')
 
+parser.add_argument('--num_workers', default=1, type=int,
+                    help='Dimension of model')
+
 parser.add_argument('--maxlen_in', default=1000, type=int,
                     help='Dimension of model')
 parser.add_argument('--down_sample_rate', default=8, type=int,

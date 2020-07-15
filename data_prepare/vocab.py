@@ -58,28 +58,26 @@ def make_vocab(fpath, fname):
     logging.info('Vocab path: {}\t size: {}'.format(fname, len(word2cnt)))
 
 
-def pre_processing(fpath, fname):
-    import re
-    with open(fpath, errors='ignore') as f, open(fname, 'w') as fw:
+def look_up(f_trans, f_vocab, f_output):
+    token2idx, _ = load_vocab(f_vocab)
+    with open(f_trans) as f, open(f_output, 'w') as fw:
         for line in tqdm(f):
-            line = line.strip().split(maxsplit=1)
-            idx = line[0]
-            # list_tokens = re.findall('\[[^\[\]]+\]|[a-zA-Z0-9^\[^\]]+|[^x00-xff]', line[1])
-            list_tokens = re.findall('\[[^\[\]]+\]|[^x00-xff]|[A-Za-z]', line[1])
-            list_tokens = [token.upper() for token in list_tokens]
-
-            fw.write(idx+' '+' '.join(list_tokens)+'\n')
+            uttid, phones = line.strip().split(maxsplit=1)
+            line = uttid + ' ' + ' '.join([str(token2idx[p]) for p in phones.split()])
+            fw.write(line + '\n')
 
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--output', type=str, dest='src_vocab')
-    # parser.add_argument('--dst_vocab', type=str, dest='dst_vocab')
-    parser.add_argument('--input', type=str, dest='src_path')
-    # parser.add_argument('--dst_path', type=str, dest='dst_path')
+    parser.add_argument('-m', type=str, dest='mode')
+    parser.add_argument('--trans', type=str, dest='trans')
+    parser.add_argument('--vocab', type=str, dest='vocab')
+    parser.add_argument('--output', type=str, dest='output', default=None)
     args = parser.parse_args()
     # Read config
     logging.basicConfig(level=logging.INFO)
-    make_vocab(args.src_path, args.src_vocab)
-    # pre_processing(args.src_path, args.src_vocab)
+    if args.mode == 'gen':
+        make_vocab(args.trans, args.vocab)
+    else:
+        look_up(args.trans, args.vocab, args.output)
     logging.info("Done")
