@@ -141,7 +141,8 @@ def get_attn_pad_mask(input_lengths, expand_length):
 
 
 def spec_aug(padded_features, feature_lengths, config):
-    freq_mask_num, freq_mask_width, time_mask_num, time_mask_width = config
+    # print('using spec_aug:', config)
+    freq_mask_num, freq_mask_width, time_mask_num, time_mask_width = (int(i) for i in config.split('-'))
     freq_means = torch.mean(padded_features, dim=-1)
     time_means = (torch.sum(padded_features, dim=1)
             /feature_lengths[:, None].float()) # Note that features are padded with zeros.

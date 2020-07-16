@@ -2,57 +2,40 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from transformer.attention import MultiheadAttention
 from transformer.encoder import EncoderLayer
-from transformer.attention import MultiHeadAttention
 from transformer.module import PositionalEncoding, PositionwiseFeedForward
-from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, \
-                sequence_mask, get_subsequent_mask, pad_list
+from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, get_subsequent_mask, pad_list
 
 
 class Decoder(nn.Module):
     ''' A decoder model with self attention mechanism. '''
 
-    def __init__(
-            self, sos_id, eos_id,
-            n_tgt_vocab, d_word_vec,
-            n_layers, n_head, d_k, d_v,
-            d_model, d_inner, dropout=0.1,
-            tgt_emb_prj_weight_sharing=True,
-            pe_maxlen=5000):
+    def __init__(self, sos_id, eos_id, n_tgt_vocab, n_layers, n_head,
+                 d_model, d_inner, dropout=0.1):
         super().__init__()
         # parameters
         self.sos_id = sos_id  # Start of Sentence
         self.eos_id = eos_id  # End of Sentence
         self.n_tgt_vocab = n_tgt_vocab
-        self.d_word_vec = d_word_vec
+        self.d_word_vec = d_model
         self.n_layers = n_layers
         self.n_head = n_head
-        self.d_k = d_k
-        self.d_v = d_v
         self.d_model = d_model
         self.d_inner = d_inner
         self.d_output = n_tgt_vocab
         self.dropout = dropout
-        self.tgt_emb_prj_weight_sharing = tgt_emb_prj_weight_sharing
-        self.pe_maxlen = pe_maxlen
 
-        self.tgt_word_emb = nn.Embedding(n_tgt_vocab, d_word_vec)
-        self.positional_encoding = PositionalEncoding(d_model, max_len=pe_maxlen)
+        self.tgt_word_emb = nn.Embedding(n_tgt_vocab, self.d_word_vec)
+        self.positional_encoding = PositionalEncoding(d_model)
         self.dropout = nn.Dropout(dropout)
 
         self.layer_stack = nn.ModuleList([
-            DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+            DecoderLayer(d_model, d_inner, n_head, dropout=dropout)
             for _ in range(n_layers)])
 
         self.tgt_word_prj = nn.Linear(d_model, n_tgt_vocab, bias=False)
         nn.init.xavier_normal_(self.tgt_word_prj.weight)
-
-        if tgt_emb_prj_weight_sharing:
-            # Share the weight matrix between target word embedding & the final logit dense layer
-            self.tgt_word_prj.weight = self.tgt_word_emb.weight
-            self.x_logit_scale = (d_model ** 0.5)
-        else:
-            self.x_logit_scale = 1.
 
     def preprocess(self, targets):
         """Generate decoder input and output label from padded_input
@@ -95,7 +78,7 @@ class Decoder(nn.Module):
         dec_enc_attn_mask = get_attn_pad_mask(encoder_input_lengths, output_length)
 
         # Forward
-        dec_output = self.dropout(self.tgt_word_emb(targets_sos) * self.x_logit_scale +
+        dec_output = self.dropout(self.tgt_word_emb(targets_sos) +
                                   self.positional_encoding(targets_sos))
 
         for dec_layer in self.layer_stack:
@@ -116,7 +99,7 @@ class Decoder(nn.Module):
         slf_attn_mask = get_subsequent_mask(ys)
 
         # -- Forward
-        dec_output = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+        dec_output = self.tgt_word_emb(ys) + self.positional_encoding(ys)
 
         for dec_layer in self.layer_stack:
             dec_output = dec_layer(
@@ -221,44 +204,31 @@ class Decoder(nn.Module):
 class Decoder_CIF(Decoder):
     """Encoder of Transformer including self-attention and feed forward.
     """
-    def __init__(self, sos_id, n_tgt_vocab, d_word_vec, n_layers, n_head, d_k, d_v,
-                 d_model, d_inner, dropout=0.1, tgt_emb_prj_weight_sharing=True,
-                 pe_maxlen=5000):
+    def __init__(self, sos_id, n_tgt_vocab, n_layers, n_head, d_model, d_inner, dropout=0.1):
         # parameters
         nn.Module.__init__(self)
         # parameters
         self.sos_id = sos_id  # Start of Sentence
         self.n_tgt_vocab = n_tgt_vocab
-        self.d_word_vec = d_word_vec
+        self.d_word_vec = d_model
         self.n_layers = n_layers
         self.n_head = n_head
-        self.d_k = d_k
-        self.d_v = d_v
         self.d_model = d_model
         self.d_inner = d_inner
         self.d_output = n_tgt_vocab
         self.dropout = dropout
-        self.tgt_emb_prj_weight_sharing = tgt_emb_prj_weight_sharing
-        self.pe_maxlen = pe_maxlen
 
-        self.tgt_word_emb = nn.Embedding(n_tgt_vocab, d_word_vec)
-        self.positional_encoding = PositionalEncoding(d_model, max_len=pe_maxlen)
+        self.tgt_word_emb = nn.Embedding(n_tgt_vocab, self.d_word_vec)
+        self.positional_encoding = PositionalEncoding(d_model)
         self.dropout = nn.Dropout(dropout)
 
         self.layer_stack = nn.ModuleList([
-            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+            EncoderLayer(d_model, d_inner, n_head, dropout=dropout)
             for _ in range(n_layers)])
         self.input_affine = nn.Linear(2*d_model, d_model, bias=False)
 
         self.tgt_word_prj = nn.Linear(2*d_model, n_tgt_vocab, bias=False)
         nn.init.xavier_normal_(self.tgt_word_prj.weight)
-
-        if tgt_emb_prj_weight_sharing:
-            # Share the weight matrix between target word embedding & the final logit dense layer
-            self.tgt_word_prj.weight = self.tgt_word_emb.weight
-            self.x_logit_scale = (d_model ** 0.5)
-        else:
-            self.x_logit_scale = 1.
 
     def preprocess(self, target):
         """Generate decoder input and output label from padded_input
@@ -289,8 +259,7 @@ class Decoder_CIF(Decoder):
             seq_k=ys_in, seq_q=ys_in, pad_idx=0)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
 
-        ys_in_emb = self.dropout(self.tgt_word_emb(ys_in) * self.x_logit_scale +
-                                 self.positional_encoding(ys_in))
+        ys_in_emb = self.dropout(self.tgt_word_emb(ys_in) + self.positional_encoding(ys_in))
 
         dec_output = self.input_affine(torch.cat([encoded_attentioned, ys_in_emb], -1))
 
@@ -312,7 +281,7 @@ class Decoder_CIF(Decoder):
         slf_attn_mask = get_subsequent_mask(ys)
 
         # -- Forward
-        target_emb = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+        target_emb = self.tgt_word_emb(ys) + self.positional_encoding(ys)
         dec_output = self.input_affine(torch.cat([encoded_attentioned[:, :t+1, :], target_emb], -1))
 
         for dec_layer in self.layer_stack:
@@ -384,7 +353,7 @@ class Decoder_CIF(Decoder):
 
     def step_forward_cache(self, ys, enc_attentioned, dec_cache, t):
         # -- Forward
-        target_emb = self.tgt_word_emb(ys) * self.x_logit_scale + self.positional_encoding(ys)
+        target_emb = self.tgt_word_emb(ys) + self.positional_encoding(ys)
         dec_output = self.input_affine(torch.cat([enc_attentioned[:, :t+1, :], target_emb], -1))
         new_cache = []
 
@@ -526,10 +495,10 @@ class Decoder_CIF(Decoder):
 class DecoderLayer(nn.Module):
     ''' Compose with three layers '''
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
+    def __init__(self, d_model, d_inner, n_head, dropout=0.1):
         super().__init__()
-        self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
-        self.enc_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
+        self.slf_attn = MultiheadAttention(d_model, n_head, dropout=dropout)
+        self.enc_attn = MultiheadAttention(d_model, n_head, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
 
     def forward(self, dec_input, enc_output, non_pad_mask=None, slf_attn_mask=None, dec_enc_attn_mask=None):

@@ -8,19 +8,20 @@ class CIF_Model(nn.Module):
     """An encoder-decoder framework only includes attention.
     """
 
-    def __init__(self, conv_encoder, encoder, assigner, decoder):
+    def __init__(self, conv_encoder, encoder, assigner, decoder, spec_aug_cfg=None):
         super().__init__()
         self.conv_encoder = conv_encoder
         self.encoder = encoder
         self.assigner = assigner
         self.decoder = decoder
+        self.spec_aug_cfg = spec_aug_cfg
         self.ctc_fc = nn.Linear(encoder.d_output, decoder.d_output, bias=False)
 
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, features, len_features, targets, threshold=0.95, add_spec_aug=False):
+    def forward(self, features, len_features, targets, threshold=0.95):
         """
         Args:
             features: N x T x D
@@ -28,8 +29,8 @@ class CIF_Model(nn.Module):
             padded_targets: N x To
         """
 
-        if add_spec_aug:
-            features, len_features = spec_aug(features, len_features, (2, 27, 2, 40))
+        if self.spec_aug_cfg:
+            features, len_features = spec_aug(features, len_features, self.spec_aug_cfg)
 
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
         encoder_outputs = self.encoder(conv_outputs, len_sequence)
@@ -133,26 +134,31 @@ class CIF_Model(nn.Module):
     def create_model(cls, args):
         from transformer.conv_encoder import Conv2dSubsample
         from transformer.encoder import Encoder
-        # from transformer.attentionAssigner import Attention_Assigner
-        from transformer.attentionAssigner import Attention_Assigner_RNN as Attention_Assigner
+        from transformer.attentionAssigner import Attention_Assigner
+        # from transformer.attentionAssigner import Attention_Assigner_RNN as Attention_Assigner
         from transformer.decoder import Decoder_CIF as Decoder
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+        conv_encoder = Conv2dSubsample(d_input=args.d_input * args.LFR_m,
+                                       d_model=args.d_model,
                                        n_layers=args.n_conv_layers)
-        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+        encoder = Encoder(d_input=args.d_model,
+                          n_layers=args.n_layers_enc,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
         assigner = Attention_Assigner(d_input=args.d_model,
                                       d_hidden=args.d_assigner_hidden,
                                       w_context=args.w_context,
                                       n_layers=args.n_assigner_layers)
-        decoder = Decoder(args.sos_id, args.vocab_size, args.d_model, args.n_layers_dec,
-                          args.n_head, args.d_k, args.d_v, args.d_model,
-                          args.d_inner, dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
-
-        model = cls(conv_encoder, encoder, assigner, decoder)
+        decoder = Decoder(sos_id=args.sos_id,
+                          n_tgt_vocab=args.vocab_size,
+                          n_layers=args.n_layers_dec,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
+        model = cls(conv_encoder, encoder, assigner, decoder, args.spec_aug_cfg)
 
         return model
 
@@ -160,8 +166,7 @@ class CIF_Model(nn.Module):
     def load_model(cls, path, args):
 
         # creat mdoel
-        conv_encoder, encoder, assigner, decoder = cls.create_model(args)
-        model = cls(conv_encoder, encoder, assigner, decoder)
+        model= cls.create_model(args)
 
         # load params
         package = torch.load(path, map_location=lambda storage, loc: storage)

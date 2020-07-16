@@ -3,13 +3,13 @@ SRC_ROOT=$PWD/../../src
 export PYTHONPATH=$SRC_ROOT:$PYTHONPATH
 
 gpu_id=2
-stage='test'
+stage='train'
 
 structure='cif'
 model_src=$SRC_ROOT/transformer
 dumpdir=/data3/easton/data/AISHELL/dump   # directory to dump full features
 vocab=/data3/easton/data/AISHELL/data/lang_1char/char.vocab
-expdir=exp/cif_4 # tag for managing experiments.
+expdir=exp/cif # tag for managing experiments.
 decode_dir=${expdir}/decode_test_beam${beam_size}_nbest${nbest}_ml${decode_max_len}
 model=last.model
 # Training config
@@ -34,6 +34,7 @@ decode_max_len=100
 do_delta=false
 LFR_m=1  # Low Frame Rate: number of frames to stack
 LFR_n=1  # Low Frame Rate: number of frames to skip
+spec_aug_cfg=2-27-2-40
 
 # Network architecture
 # Conv encoder
@@ -43,19 +44,16 @@ n_conv_layers=3
 d_input=80
 n_layers_enc=6
 n_head=8
-d_k=64
-d_v=64
 d_model=512
 d_inner=2048
 dropout=0.1
-pe_maxlen=5000
 
 # assigner
 context_width=3
+d_assigner_hidden=512
 n_assigner_layers=1
 
 # Decoder
-d_word_vec=512
 n_layers_dec=6
 
 # Loss
@@ -76,18 +74,16 @@ if [ $stage = 'train' ];then
             --structure ${structure} \
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
+            --spec_aug_cfg ${spec_aug_cfg} \
             --d_input $d_input \
             --n_conv_layers $n_conv_layers \
             --n_layers_enc $n_layers_enc \
+            --d_assigner_hidden $d_assigner_hidden \
             --n_assigner_layers $n_assigner_layers \
             --n_head $n_head \
-            --d_k $d_k \
-            --d_v $d_v \
             --d_model $d_model \
             --d_inner $d_inner \
             --dropout $dropout \
-            --pe_maxlen $pe_maxlen \
-            --d_word_vec $d_word_vec \
             --n_layers_dec $n_layers_dec \
             --label_smoothing ${label_smoothing} \
             --epochs $epochs \
@@ -117,15 +113,11 @@ if [ $stage = 'test' ];then
             --d_input $d_input \
             --n_conv_layers $n_conv_layers \
             --n_layers_enc $n_layers_enc \
+            --d_assigner_hidden $d_assigner_hidden \
             --n_assigner_layers $n_assigner_layers \
             --n_head $n_head \
-            --d_k $d_k \
-            --d_v $d_v \
             --d_model $d_model \
             --d_inner $d_inner \
-            --dropout $dropout \
-            --pe_maxlen $pe_maxlen \
-            --d_word_vec $d_word_vec \
             --n_layers_dec $n_layers_dec \
             --model-path ${expdir}/${model} \
             --output ${decode_dir}/hyp \

@@ -37,9 +37,10 @@ class Transformer_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | Current Loss {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
-                      format(epoch + 1, i + 1, ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
-                             1000 * (time.time() - start) / (i + 1), self.optimizer.step_num),
+                print('Epoch {} | batch [{}, {}, {}]\t| Loss {:.2f} | lr {:.2e} | {:.2f} s | step {}'.
+                      format(epoch + 1, padded_input.size(0), padded_input.size(1), padded_input.size(2),
+                             ce_loss.item(), self.optimizer.optimizer.param_groups[0]["lr"],
+                             (time.time() - start) / (i + 1), self.optimizer.step_num),
                       flush=True)
 
             # visualizing loss using visdom
@@ -94,10 +95,11 @@ class Transformer_CTC_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | ctc {:.3f} | ce {:.3f}  | lr {:.3e} | {:.1f} ms/batch | step {}'.
-                      format(epoch + 1, i + 1, ctc_loss.item(), ce_loss.item(),
+                print('Epoch {} | batch [{}, {}, {}]\t| ctc {:.2f} | ce {:.2f}  | lr {:.2e} | {:.2f} s | step {}'.
+                      format(epoch + 1, padded_input.size(0), padded_input.size(1),
+                             padded_input.size(2), ctc_loss.item(), ce_loss.item(),
                              self.optimizer.optimizer.param_groups[0]["lr"],
-                             1000 * (time.time() - start) / (i + 1),
+                             (time.time() - start) / (i + 1),
                              self.optimizer.step_num),
                       flush=True)
 
@@ -121,7 +123,6 @@ class CIF_Solver(Solver):
     def __init__(self, data, model, optimizer, args):
         super().__init__(data, model, optimizer, args)
         self.lambda_qua = args.lambda_qua
-        self.random_scale = args.random_scale
 
     def _run_one_epoch(self, epoch, cross_valid=False):
         start = time.time()
@@ -143,7 +144,7 @@ class CIF_Solver(Solver):
             input_lengths = input_lengths.cuda()
             targets = targets.cuda()
             logits_ctc, len_logits_ctc, _number, number, logits_ce = \
-                self.model(padded_input, input_lengths, targets, add_spec_aug=True)
+                self.model(padded_input, input_lengths, targets)
             qua_loss, ctc_loss, ce_loss = cal_ctc_qua_ce_loss(
                 logits_ctc, len_logits_ctc, _number, number, logits_ce, targets,
                 smoothing=self.label_smoothing)
@@ -160,10 +161,11 @@ class CIF_Solver(Solver):
             total_loss += loss.item()
 
             if i % self.print_freq == 0:
-                print('Epoch {} | Iter {} | ctc {:.3f} | qua {:.3f} | ce {:.3f} | lr {:.3e} | {:.1f} ms/batch | step {}'.
-                      format(epoch + 1, i + 1, ctc_loss.item(), qua_loss.item(), ce_loss.item(),
+                print('Epoch {} | batch [{}, {}, {}]\t| ctc {:.2f} | qua {:.2f} | ce {:.2f} | lr {:.2e} | {:.2f} s | step {}'.
+                      format(epoch + 1, padded_input.size(0), padded_input.size(1),
+                             padded_input.size(2), ctc_loss.item(), qua_loss.item(), ce_loss.item(),
                              self.optimizer.optimizer.param_groups[0]["lr"],
-                             1000 * (time.time() - start) / (i + 1),
+                             (time.time() - start) / (i + 1),
                              self.optimizer.step_num),
                       flush=True)
 

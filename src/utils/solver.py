@@ -84,7 +84,6 @@ class Solver(object):
                 self.save_folder, 'epoch-%d.model' % (epoch + 1))
             torch.save(self.model.serialize(self.model,
                                             self.optimizer, epoch + 1,
-                                            self.LFR_m, self.LFR_n,
                                             tr_loss=self.tr_loss,
                                             cv_loss=self.cv_loss),
                        file_path)

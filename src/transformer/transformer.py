@@ -8,26 +8,30 @@ class Transformer(nn.Module):
     """An encoder-decoder framework only includes attention.
     """
 
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, spec_aug_cfg=None):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
+        self.spec_aug_cfg = spec_aug_cfg
 
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, padded_input, input_lengths, padded_target):
+    def forward(self, features, len_features, padded_target):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
-        encoder_padded_outputs = self.encoder(padded_input, input_lengths)
+        if self.spec_aug_cfg:
+            features, len_features = spec_aug(features, len_features, self.spec_aug_cfg)
+
+        encoder_padded_outputs = self.encoder(features, len_features)
         # pred is score before softmax
         logits, targets_eos = self.decoder(padded_target, encoder_padded_outputs,
-                                      input_lengths)
+                                           len_features)
         return logits, targets_eos
 
     def recognize(self, input, input_length, char_list, args):
@@ -50,21 +54,28 @@ class Transformer(nn.Module):
         from transformer.decoder import Decoder
         from transformer.encoder import Encoder
 
-        encoder = Encoder(args.d_input * args.LFR_m, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(args.sos_id, args.eos_id, args.vocab_size,
-                          args.d_word_vec, args.n_layers_dec, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        encoder = Encoder(d_input=args.d_input * args.LFR_m,
+                          n_layers=args.n_layers_enc,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
+        decoder = Decoder(sos_id=args.sos_id,
+                          eos_id=args.eos_id,
+                          n_tgt_vocab=args.vocab_size,
+                          n_layers=args.n_layers_dec,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
 
-        return encoder, decoder
+        model = cls.create_model(encoder, decoder)
+
+        return model
 
     @classmethod
     def load_model(cls, path, args):
-        model = cls(*cls.create_model(args))
+        model = cls.create_model(args)
 
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(package['state_dict'])
@@ -90,23 +101,25 @@ class CTC_Transformer(Transformer):
     """An encoder-decoder framework only includes attention.
     """
 
-    def __init__(self, encoder, decoder):
-        super().__init__(encoder, decoder)
+    def __init__(self, encoder, decoder, spec_aug_cfg=None):
+        super().__init__(encoder, decoder, spec_aug_cfg)
         self.ctc_fc = nn.Linear(encoder.d_output, decoder.d_output, bias=False)
 
-    def forward(self, padded_input, input_lengths, padded_target):
+    def forward(self, features, len_features, padded_target):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
-        encoder_padded_outputs = self.encoder(padded_input, input_lengths)
+        if self.spec_aug_cfg:
+            features, len_features = spec_aug(features, len_features, self.spec_aug_cfg)
+
+        encoder_padded_outputs = self.encoder(features, len_features)
         ctc_pred = self.ctc_fc(encoder_padded_outputs)
-        ctc_pred_len = input_lengths
+        ctc_pred_len = len_features
         # pred is score before softmax
-        pred = self.decoder(padded_target, encoder_padded_outputs,
-                                      input_lengths)
+        pred = self.decoder(padded_target, encoder_padded_outputs, len_features)
 
         return ctc_pred_len, ctc_pred, pred
 
@@ -115,19 +128,19 @@ class Conv_CTC_Transformer(CTC_Transformer):
     """An encoder-decoder framework only includes attention.
     """
 
-    def __init__(self, conv_encoder, encoder, decoder):
-        super().__init__(encoder, decoder)
+    def __init__(self, conv_encoder, encoder, decoder, spec_aug_cfg=None):
+        super().__init__(encoder, decoder, spec_aug_cfg)
         self.conv_encoder = conv_encoder
 
-    def forward(self, features, len_features, targets, add_spec_aug=False):
+    def forward(self, features, len_features, targets, spec_aug_cfg=False):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
-        if add_spec_aug:
-            features, len_features = spec_aug(features, len_features, (2, 27, 2, 40))
+        if self.spec_aug_cfg:
+            features, len_features = spec_aug(features, len_features, self.spec_aug_cfg)
 
         conv_outputs, len_sequence = self.conv_encoder(features, len_features)
         encoder_outputs = self.encoder(conv_outputs, len_sequence)
@@ -160,25 +173,32 @@ class Conv_CTC_Transformer(CTC_Transformer):
         from transformer.encoder import Encoder
         from transformer.conv_encoder import Conv2dSubsample
 
-        conv_encoder = Conv2dSubsample(args.d_input * args.LFR_m, args.d_model,
+        conv_encoder = Conv2dSubsample(d_input=args.d_input * args.LFR_m,
+                                       d_model=args.d_model,
                                        n_layers=args.n_conv_layers)
-        encoder = Encoder(args.d_model, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
-        decoder = Decoder(args.sos_id, args.eos_id, args.vocab_size,
-                          args.d_word_vec, args.n_layers_dec, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout,
-                          tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
-                          pe_maxlen=args.pe_maxlen)
+        encoder = Encoder(d_input=args.d_model,
+                          n_layers=args.n_layers_enc,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
+        decoder = Decoder(sos_id=args.sos_id,
+                          eos_id=args.eos_id,
+                          n_tgt_vocab=args.vocab_size,
+                          n_layers=args.n_layers_dec,
+                          n_head=args.n_head,
+                          d_model=args.d_model,
+                          d_inner=args.d_inner,
+                          dropout=args.dropout)
 
-        return conv_encoder, encoder, decoder
+        model = cls(conv_encoder, encoder, decoder, spec_aug_cfg=args.spec_aug_cfg)
+
+        return model
 
     @classmethod
     def load_model_from_package(cls, package, args):
 
-        conv_encoder, encoder, decoder = cls.create_model(args)
-        model = cls(conv_encoder, encoder, decoder)
+        model = cls.create_model(args, spec_aug_cfg=args.spec_aug_cfg)
         model.load_state_dict(package['state_dict'])
 
         return model

@@ -16,7 +16,7 @@ model=last.model
 epochs=100
 continue=0
 print_freq=100
-batch_frames=15000
+batch_frames=50000
 maxlen_in=800
 maxlen_out=150
 
@@ -34,20 +34,17 @@ decode_max_len=100
 do_delta=false
 LFR_m=1  # Low Frame Rate: number of frames to stack
 LFR_n=1  # Low Frame Rate: number of frames to skip
+spec_aug_cfg=2-27-2-40
 
 # Network architecture
 # Encoder
 d_input=80
 n_layers_enc=6
 n_head=8
-d_k=64
-d_v=64
 d_model=512
 d_inner=2048
 dropout=0.1
-pe_maxlen=5000
 # Decoder
-d_word_vec=512
 n_layers_dec=6
 
 # Loss
@@ -68,16 +65,13 @@ if [ $stage = 'train' ];then
             --structure ${structure} \
             --LFR_m ${LFR_m} \
             --LFR_n ${LFR_n} \
+            --spec_aug_cfg ${spec_aug_cfg} \
             --d_input $d_input \
             --n_layers_enc $n_layers_enc \
             --n_head $n_head \
-            --d_k $d_k \
-            --d_v $d_v \
             --d_model $d_model \
             --d_inner $d_inner \
             --dropout $dropout \
-            --pe_maxlen $pe_maxlen \
-            --d_word_vec $d_word_vec \
             --n_layers_dec $n_layers_dec \
             --label_smoothing ${label_smoothing} \
             --epochs $epochs \

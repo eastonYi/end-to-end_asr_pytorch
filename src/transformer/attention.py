@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 
 
-class MultiHeadAttention(nn.Module):
+class MultiheadAttention(nn.Module):
     ''' Multi-Head Attention module '''
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
+    def __init__(self, d_model, n_head, d_k=64, d_v=64, dropout=0.1):
         super().__init__()
 
         self.n_head = n_head

@@ -23,6 +23,8 @@ parser.add_argument('--LFR_m', default=4, type=int,
                     help='Low Frame Rate: number of frames to stack')
 parser.add_argument('--LFR_n', default=3, type=int,
                     help='Low Frame Rate: number of frames to skip')
+parser.add_argument('--spec_aug_cfg', default=None, type=str,
+                    help='spec_aug_cfg')
 # Network architecture
 
 # conv_encoder
@@ -40,18 +42,12 @@ parser.add_argument('--n_layers_enc', default=6, type=int,
                     help='Number of encoder stacks')
 parser.add_argument('--n_head', default=8, type=int,
                     help='Number of Multi Head Attention (MHA)')
-parser.add_argument('--d_k', default=64, type=int,
-                    help='Dimension of key')
-parser.add_argument('--d_v', default=64, type=int,
-                    help='Dimension of value')
 parser.add_argument('--d_model', default=512, type=int,
                     help='Dimension of model')
 parser.add_argument('--d_inner', default=2048, type=int,
                     help='Dimension of inner')
 parser.add_argument('--dropout', default=0.1, type=float,
                     help='Dropout rate')
-parser.add_argument('--pe_maxlen', default=5000, type=int,
-                    help='Positional Encoding max len')
 # assigner
 parser.add_argument('--w_context', default=3, type=int,
                     help='Positional Encoding max len')
@@ -59,15 +55,9 @@ parser.add_argument('--d_assigner_hidden', default=512, type=int,
                     help='Positional Encoding max len')
 parser.add_argument('--n_assigner_layers', default=3, type=int,
                     help='Positional Encoding max len')
-parser.add_argument('--random_scale', default=0, type=int,
-                    help='Continue from checkpoint model')
 # decoder
-parser.add_argument('--d_word_vec', default=512, type=int,
-                    help='Dim of decoder embedding')
 parser.add_argument('--n_layers_dec', default=6, type=int,
                     help='Number of decoder stacks')
-parser.add_argument('--tgt_emb_prj_weight_sharing', default=0, type=int,
-                    help='share decoder embedding with decoder projection')
 # Loss
 parser.add_argument('--label_smoothing', default=0.1, type=float,
                     help='label smoothing')
@@ -149,25 +139,21 @@ def main(args):
         from transformer.Transformer import Transformer
         from transformer.solver import Transformer_Solver as Solver
 
-        encoder, decoder = Transformer.create_model(args)
-        model = Transformer(encoder, decoder)
+        model = Transformer.create_model(args)
 
     elif args.structure == 'transformer-ctc':
         from transformer.Transformer import CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
 
-        encoder, decoder = Transformer.create_model(args)
-        model = Transformer(encoder, decoder)
+        model = Transformer.create_model(args)
 
     elif args.structure == 'conv-transformer-ctc':
         from transformer.Transformer import Conv_CTC_Transformer as Transformer
         from transformer.solver import Transformer_CTC_Solver as Solver
 
-        conv_encoder, encoder, decoder = Transformer.create_model(args)
-        model = Transformer(conv_encoder, encoder, decoder)
+        model = Transformer.create_model(args)
 
     elif args.structure == 'cif':
-
         from transformer.CIF_Model import CIF_Model
         from transformer.solver import CIF_Solver as Solver
 
