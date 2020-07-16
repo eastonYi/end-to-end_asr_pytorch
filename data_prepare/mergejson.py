@@ -15,17 +15,11 @@ if __name__ == '__main__':
                         help='json files')
     parser.add_argument('--multi', '-m', type=int,
                         help='Test the json file for multiple input/output', default=0)
-    parser.add_argument('--verbose', '-V', default=0, type=int,
-                        help='Verbose option')
     args = parser.parse_args()
 
     # logging info
-    if args.verbose > 0:
-        logging.basicConfig(
-            level=logging.INFO, format="%(asctime)s (%(module)s:%(lineno)d) %(levelname)s: %(message)s")
-    else:
-        logging.basicConfig(
-            level=logging.WARN, format="%(asctime)s (%(module)s:%(lineno)d) %(levelname)s: %(message)s")
+    logging.basicConfig(
+        level=logging.WARN, format="%(asctime)s (%(module)s:%(lineno)d) %(levelname)s: %(message)s")
 
     # make intersection set for utterance keys
     js = []

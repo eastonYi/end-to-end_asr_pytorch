@@ -143,7 +143,7 @@ class CIF_Solver(Solver):
             input_lengths = input_lengths.cuda()
             targets = targets.cuda()
             logits_ctc, len_logits_ctc, _number, number, logits_ce = \
-                self.model(padded_input, input_lengths, targets, random_scale=self.random_scale)
+                self.model(padded_input, input_lengths, targets, add_spec_aug=True)
             qua_loss, ctc_loss, ce_loss = cal_ctc_qua_ce_loss(
                 logits_ctc, len_logits_ctc, _number, number, logits_ce, targets,
                 smoothing=self.label_smoothing)

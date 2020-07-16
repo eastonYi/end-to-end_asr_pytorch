@@ -171,8 +171,7 @@ def main(args):
         from transformer.CIF_Model import CIF_Model
         from transformer.solver import CIF_Solver as Solver
 
-        conv_encoder, encoder, assigner, decoder = CIF_Model.create_model(args)
-        model = CIF_Model(conv_encoder, encoder, assigner, decoder)
+        model = CIF_Model.create_model(args)
 
     print(model)
     model.cuda()

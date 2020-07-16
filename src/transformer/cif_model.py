@@ -20,8 +20,7 @@ class CIF_Model(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, features, len_features, targets,
-                threshold=0.95, random_scale=False, add_spec_aug=False):
+    def forward(self, features, len_features, targets, threshold=0.95, add_spec_aug=False):
         """
         Args:
             features: N x T x D
@@ -153,7 +152,9 @@ class CIF_Model(nn.Module):
                           tgt_emb_prj_weight_sharing=args.tgt_emb_prj_weight_sharing,
                           pe_maxlen=args.pe_maxlen)
 
-        return conv_encoder, encoder, assigner, decoder
+        model = cls(conv_encoder, encoder, assigner, decoder)
+
+        return model
 
     @classmethod
     def load_model(cls, path, args):

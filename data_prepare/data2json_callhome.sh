@@ -5,12 +5,11 @@
 feat="feats_cmvn.scp"
 phone_dic='phone.vocab'
 oov="<unk>"
-verbose=0
 
 . utils/parse_options.sh
 
-if [ $# != 2 ]; then
-    echo "Usage: $0 <data-dir> <dict>";
+if [ $# != 1 ]; then
+    echo "Usage: $0 <data-dir>";
     exit 1;
 fi
 
@@ -21,18 +20,11 @@ rm -f ${tmpdir}/*.scp
 
 echo $tmpdir
 
-# input, which is not necessary for decoding mode, and make it as an option
-if [ ! -z ${feat} ]; then
-    if [ ${verbose} -eq 0 ]; then
-        utils/data/get_utt2num_frames.sh ${dir} &> /dev/null
-        cp ${dir}/utt2num_frames ${tmpdir}/ilen.scp
-        feat-to-dim scp:${feat} ark,t:${tmpdir}/idim.scp &> /dev/null
-    else
-        utils/data/get_utt2num_frames.sh ${dir}
-        cp ${dir}/utt2num_frames ${tmpdir}/ilen.scp
-        feat-to-dim scp:${feat} ark,t:${tmpdir}/idim.scp
-    fi
-fi
+# input, which is not necessary for decoding mode, and make it as an optio
+utils/data/get_utt2num_frames.sh ${dir} &> /dev/null
+cp ${dir}/utt2num_frames ${tmpdir}/ilen.scp
+cp ${dir}/${feat} ${tmpdir}/feats.scp
+feat-to-dim scp:${tmpdir}/feats.scp ark,t:${tmpdir}/idim.scp &> /dev/null
 
 cp ${dir}/trans.phone ${tmpdir}/phone.scp
 cp ${dir}/text ${tmpdir}/text
@@ -59,6 +51,6 @@ for x in ${dir}/text ${tmpdir}/*.scp; do
 done
 
 echo "merging json";
-python mergejson.py --verbose ${verbose} ${tmpdir}/*.json > ${dir}/data.json
+python mergejson.py ${tmpdir}/*.json > ${dir}/data.json
 
 rm -fr ${tmpdir}
