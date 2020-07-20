@@ -58,6 +58,7 @@ n_layers_dec=6
 
 # Loss
 label_smoothing=0.1
+lambda_qua=0.001
 
 feat_train_dir=${dumpdir}/train/delta${do_delta}; mkdir -p ${feat_train_dir}
 feat_test_dir=${dumpdir}/test/delta${do_delta}; mkdir -p ${feat_test_dir}
@@ -86,6 +87,7 @@ if [ $stage = 'train' ];then
             --dropout $dropout \
             --n_layers_dec $n_layers_dec \
             --label_smoothing ${label_smoothing} \
+            --lambda_qua ${lambda_qua} \
             --epochs $epochs \
             --shuffle $shuffle \
             --batch_frames $batch_frames \

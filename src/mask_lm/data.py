@@ -8,7 +8,6 @@ Logic:
 2. After AudioDataLoader getting one minibatch from AudioDataset,
    AudioDataLoader calls its collate_fn(batch) to process this minibatch.
 """
-import numpy as np
 import torch
 import torch.utils.data as data
 
@@ -21,8 +20,8 @@ class VQ_Dataset(data.Dataset):
           remove batch_size to dataloader later.
     """
 
-    def __init__(self, data_path, batch_size, max_length_in, max_length_out,
-                 down_sample_rate=1, num_batches=0, batch_frames=0):
+    def __init__(self, data_path, token2idx, max_length_in, max_length_out,
+                 down_sample_rate=1, batch_frames=0):
         # From: espnet/src/asr/asr_utils.py: make_batchset()
         """
         Args:
@@ -30,57 +29,80 @@ class VQ_Dataset(data.Dataset):
             num_batches: for debug. only use num_batches minibatch but not all.
         """
         super().__init__()
-        minibatch = []
+        all_batches = []
         one_batch = []
         num_frames = 0
-        for sample in self.sample_iter(data_path, max_length_in):
+        for sample in self.sample_iter(data_path, token2idx, max_length_in):
             one_batch.append(sample)
             num_frames += len(sample)
             if num_frames > batch_frames:
-                minibatch.append(one_batch[:-2])
+                all_batches.append(one_batch[:-2])
                 one_batch = [one_batch[-1]]
                 num_frames = len(one_batch[0])
         if one_batch:
-            minibatch.append(one_batch)
-        self.minibatch = minibatch
+            all_batches.append(one_batch)
+        self.all_batches = all_batches
 
     def __getitem__(self, index):
-        return self.minibatch[index]
+        return self.all_batches[index]
 
     def __len__(self):
-        return len(self.minibatch)
+        return len(self.all_batches)
 
-    def sample_iter(self, data_path, max_length):
+    def sample_iter(self, data_path, token2idx, max_length):
         with open(data_path) as f:
             for line in f:
-                tokens = line.strip().split()
+                uttid, tokens = line.strip().split(maxsplit=1)
+                tokens = tokens.split()
                 for i in range(0, len(tokens), max_length):
-                    yield tokens[i: i+max_length]
+                    yield [token2idx[token] for token in tokens[i: i+max_length]]
+
+def f_x_pad(batch):
+    return pad_list([torch.tensor(sample).long() for sample in batch[0]], 0)
 
 
-class VQ_DataLoader(data.DataLoader):
+class VQ_Pred_Dataset(data.Dataset):
     """
-    NOTE: just use batchsize=1 here, so drop_last=True makes no sense here.
+    TODO: this is a little HACK now, put batch_size here now.
+          remove batch_size to dataloader later.
     """
 
-    def __init__(self, *args, token2idx=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.collate_fn = LFRCollate(token2idx)
+    def __init__(self, f_vq, f_trans, tokenIn2idx, tokenOut2idx, batch_size,
+                 max_length_in, max_length_out, down_sample_rate=1):
+        # From: espnet/src/asr/asr_utils.py: make_batchset()
+        """
+        Args:
+            data: espnet/espnet json format file.
+            num_batches: for debug. only use num_batches minibatch but not all.
+        """
+        super().__init__()
+        self.all_batches = []
+        one_batch = []
+
+        with open(f_vq) as f1, open(f_trans) as f2:
+            for vq, trans in zip(f1, f2):
+                uttid, vq = vq.strip().split(maxsplit=1)
+                _uttid, trans = trans.strip().split(maxsplit=1)
+                assert uttid == _uttid
+                x = [tokenIn2idx[token] for token in vq.split()]
+                y = [tokenOut2idx[token] for token in trans.split()]
+                one_batch.append([x, y])
+
+                if len(one_batch) >= batch_size:
+                    self.all_batches.append(one_batch)
+                    one_batch = []
+
+    def __getitem__(self, index):
+        return self.all_batches[index]
+
+    def __len__(self):
+        return len(self.all_batches)
 
 
-class LFRCollate(object):
-    """Build this wrapper to pass arguments(LFR_m, LFR_n) to _collate_fn"""
-    def __init__(self, token2idx):
-        self.token2idx = token2idx
+def f_xy_pad(batch):
+    xs_pad = pad_list([torch.tensor(sample[0]).long() for sample in batch[0]], 0)
+    ys_pad = pad_list([torch.tensor(sample[1]).long() for sample in batch[0]], 0)
+    # xs_pad = pad_to_batch([sample for sample in batch[0][0]], 0)
+    # ys_pad = pad_to_batch([sample for sample in batch[0][1]], 0)
 
-    def __call__(self, batches):
-        return _collate_fn(batches, self.token2idx)
-
-
-def _collate_fn(batches, token2idx):
-    ys = [np.fromiter((token2idx[token] for token in batch), dtype=np.int64)
-          for batch in batches[0]]
-
-    ys_pad = pad_list([torch.from_numpy(y).long() for y in ys], 0)
-
-    return ys_pad
+    return xs_pad, ys_pad

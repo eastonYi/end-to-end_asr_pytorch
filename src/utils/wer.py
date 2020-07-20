@@ -242,12 +242,12 @@ def get_wer(hypfile, reffile, iscn=False, idxfile=None, printsen=False):
     total_error = total_sub + total_del + total_ins
     wer = total_error * 100.0 / total_ref_len
 
-    # print 'ref len', total_ref_len
-    # print 'sub', total_sub
-    # print 'del', total_del
-    # print 'ins', total_ins
-    # print 'wer %.2f' % wer
-    #sys.stdout.write('wer %.2f\n' % wer)
+    print('ref len', total_ref_len)
+    print('sub %.2f' % (total_sub * 100.0 / total_ref_len))
+    print('del %.2f' % (total_del * 100.0 / total_ref_len))
+    print('ins %.2f' % (total_ins * 100.0 / total_ref_len))
+    print('wer %.2f' % wer)
+    sys.stdout.write('wer %.2f\n' % wer)
 
     return total_ref_len, total_sub, total_del, total_ins, wer
 

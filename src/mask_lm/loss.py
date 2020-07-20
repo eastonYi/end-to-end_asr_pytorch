@@ -29,3 +29,15 @@ def cal_ce_mask_loss(logits, targets, mask, smoothing=0.0):
     ce_loss = loss.masked_select(non_pad_mask).sum() / n_word
 
     return ce_loss
+
+
+def cal_ctc_loss(logits, len_logits, gold, smoothing=0.0):
+    """Calculate cross entropy loss, apply label smoothing if needed.
+    """
+    n_class = logits.size(-1)
+    target_lengths = gold.ne(0).sum(dim=1).int()
+    ctc_log_probs = F.log_softmax(logits, dim=-1).transpose(0,1)
+    ctc_loss = F.ctc_loss(ctc_log_probs, gold,
+                          len_logits, target_lengths, blank=n_class-1)
+
+    return ctc_loss

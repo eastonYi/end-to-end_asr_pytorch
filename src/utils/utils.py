@@ -93,8 +93,32 @@ def parse_hypothesis(hyp, char_list):
     return text, token, tokenid, score
 
 
+def ids2str(hyps_ints, idx2token):
+    list_res = []
+    hyp = ''
+    for hyp_ints, length in zip(*hyps_ints):
+        for idx in hyp_ints[:length]:
+            hyp += idx2token[idx]
+        list_res.append(hyp)
+
+    return list_res
+
+
 # -- Transformer Related --
 import torch
+
+
+def pad_to_batch(xs, pad_value):
+    """
+    xs: nested list [[...], [...], ...]
+    """
+    lens = [len(x) for x in xs]
+    max_len = max(lens)
+
+    for l, x in zip(lens, xs):
+        x.extend([pad_value] * (max_len - l))
+
+    return torch.tensor(xs)
 
 
 def sequence_mask(lengths, maxlen=None, dtype=torch.float):

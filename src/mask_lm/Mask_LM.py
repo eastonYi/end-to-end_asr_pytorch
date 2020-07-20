@@ -38,23 +38,25 @@ class Mask_LM(nn.Module):
 
         return masked_input, ~mask_index
 
-
-    def forward(self, padded_input, input_lengths, padded_target=None):
+    def forward(self, padded_input, input_lengths, padded_target=None, mask_input=True):
         """
         Args:
             padded_input: N x Ti x D
             input_lengths: N
             padded_targets: N x To
         """
-        masked_input, masked_index = self.token_mask(padded_input)
+        if mask_input:
+            masked_input, masked_index = self.token_mask(padded_input)
+        else:
+            masked_input = padded_input
+            masked_index = None
         encoder_padded_outputs = self.encoder(masked_input, input_lengths)
         # pred is score before softmax
 
         logits_AE = self.fc(encoder_padded_outputs)
 
-        if padded_target:
-            logits = self.decoder(padded_target, encoder_padded_outputs,
-                                  input_lengths)
+        if padded_target is not None:
+            logits = self.decoder(encoder_padded_outputs, input_lengths)
         else:
             logits = None
 
@@ -77,12 +79,11 @@ class Mask_LM(nn.Module):
 
     @classmethod
     def create_model(cls, args):
-        from ctcModel.decoder import Decoder
+        from mask_lm.decoder import Decoder
         from mask_lm.encoder import Encoder
 
         encoder = Encoder(args.n_src, args.n_layers_enc, args.n_head,
-                          args.d_k, args.d_v, args.d_model, args.d_inner,
-                          dropout=args.dropout, pe_maxlen=args.pe_maxlen)
+                          args.d_model, args.d_inner, dropout=args.dropout)
         decoder = Decoder(args.n_tgt, args.d_model)
 
         model = cls(encoder, decoder)
@@ -91,7 +92,7 @@ class Mask_LM(nn.Module):
 
     @classmethod
     def load_model(cls, path, args):
-        model = cls(*cls.create_model(args))
+        model = cls.create_model(args)
 
         package = torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(package['state_dict'])

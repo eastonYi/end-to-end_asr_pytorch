@@ -34,6 +34,5 @@ class Decoder(nn.Module):
 
         # before softmax
         logits = self.tgt_word_prj(encoder_padded_outputs) * mask
-        len_logits = encoder_input_lengths
 
-        return logits, len_logits
+        return logits
