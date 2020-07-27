@@ -7,6 +7,8 @@ from transformer.encoder import EncoderLayer
 from transformer.module import PositionalEncoding, PositionwiseFeedForward
 from utils.utils import get_attn_key_pad_mask, get_attn_pad_mask, get_subsequent_mask, pad_list
 
+inf = 1e10
+
 
 class Decoder(nn.Module):
     ''' A decoder model with self attention mechanism. '''
@@ -114,193 +116,75 @@ class Decoder(nn.Module):
 
         return local_scores
 
-    def recognize_beam(self, encoder_outputs, char_list, args):
-        """Beam search, decode one utterence now.
-        Args:
-            encoder_outputs: T x H
-            char_list: list of character
-            args: args.beam
+    def batch_beam_decode(self, encoded, len_encoded, beam_size=1):
+        batch_size = len_encoded.size(0)
+        device = encoded.device
+        # beam search Initialize
+        # repeat each sample in batch along the batch axis [1,2,3,4] -> [1,1,2,2,3,3,4,4]
+        encoded = encoded[:, None, :, :].repeat(1, beam_size, 1, 1) # [batch_size, beam_size, *, hidden_units]
+        encoded = encoded.view(batch_size * beam_size, -1, encoded.size(-1))
+        len_encoded = len_encoded[:, None].repeat(1, beam_size).view(-1) # [batch_size * beam_size]
 
-        Returns:
-            nbest_hyps:
-        """
-        # search params
-        beam = args.beam_size
-        nbest = args.nbest
-        if args.decode_max_len == 0:
-            maxlen = encoder_outputs.size(0)
-        else:
-            maxlen =  min(args.decode_max_len, encoder_outputs.size(0))
+        # [[<S>, <S>, ..., <S>]], shape: [batch_size * beam_size, 1]
+        preds = torch.ones([batch_size * beam_size, 1]).long().to(device) * self.sos_id
+        # logits = torch.zeros([batch_size * beam_size, 0, self.d_output]).float().to(device)
+        len_decoded = torch.ones_like(len_encoded)
+        # the score must be [0, -inf, -inf, ...] at init, for the preds in beam is same in init!!!
+        scores = torch.tensor([0.0] + [-inf] * (beam_size - 1)).float().repeat(batch_size).to(device)  # [batch_size * beam_size]
+        finished = torch.zeros_like(scores).bool()
 
-        encoder_outputs = encoder_outputs.unsqueeze(0)
+        # collect the initial states of lstms used in decoder.
+        base_indices = torch.arange(batch_size)[:, None].repeat(1, beam_size).view(-1)
 
-        # prepare sos
-        ys = torch.ones(1, 1).fill_(self.sos_id).type_as(encoder_outputs).long()
+        while finished.int().sum() != finished.size(0):
+            # i, preds, scores, logits, len_decoded, finished
+            preds_emb = self.embedding(preds)
+            decoder_input = preds_emb
 
-        # yseq: 1xT
-        hyp = {'score': 0.0, 'yseq': ys}
-        hyps = [hyp]
-        ended_hyps = []
+            cur_scores = self.step_forward(decoder_input, encoded)
 
-        for i in range(maxlen):
-            hyps_best_kept = []
-            for hyp in hyps:
-                ys = hyp['yseq']  # 1 x i
+            scores = torch.cat([scores, cur_scores[:, None]], 1)  # [batch*beam, size_output]
 
-                local_scores = self.step_forward(ys, encoder_outputs)
+            # rank the combined scores
+            next_scores, next_preds = torch.topk(scores, k=beam_size, sorted=True, dim=-1)
 
-                # topk scores
-                local_best_scores, local_best_ids = torch.topk(
-                    local_scores, beam, dim=1)
+            # beamed scores & Pruning
+            scores = scores[:, None] + next_scores  # [batch_size * beam_size, beam_size]
+            scores = scores.view(batch_size, beam_size * beam_size)
 
-                for j in range(beam):
-                    new_hyp = {}
-                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
-                    new_hyp['yseq'] = torch.ones(1, (1+ys.size(1))).type_as(encoder_outputs).long()
-                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
-                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
-                    # will be (2 x beam) hyps at most
-                    hyps_best_kept.append(new_hyp)
+            _, k_indices = torch.topk(scores, k=beam_size)
+            k_indices = base_indices * beam_size * beam_size + k_indices.view(-1)  # [batch_size * beam_size]
+            # Update scores.
+            scores = scores.view(-1)
+            scores = torch.gather(scores, 1, k_indices)
+            # Update predictions.
+            next_preds = next_preds.view(-1)
+            next_preds = torch.gather(next_preds, 1, k_indices)
 
-            hyps = sorted(hyps_best_kept,
-                          key=lambda x: x['score'],
-                          reverse=True)[:beam]
+            # k_indices: [0~batch*beam*beam], preds: [0~batch*beam]
+            # preds, cache_lm, cache_decoder: these data are shared during the beam expand among vocab
+            preds = torch.gather(preds, 1, k_indices // beam_size)
+            preds = torch.cat([preds, next_preds[:, None]], axis=1)  # [batch_size * beam_size, i]
 
-            # add eos in the final loop to avoid that there are no ended hyps
-            if i == maxlen - 1:
-                for hyp in hyps:
-                    hyp['yseq'] = torch.cat([hyp['yseq'],
-                                             torch.ones(1, 1).fill_(self.eos_id).type_as(encoder_outputs).long()], dim=1)
+            has_eos = next_preds.eq(self.end_token)
+            finished = torch.logical_or(finished, has_eos)
+            len_decoded += 1 - finished.int()
 
-            # add ended hypothes to a final list, and removed them from current hypothes
-            # (this will be a probmlem, number of hyps < beam)
-            remained_hyps = []
-            for hyp in hyps:
-                if hyp['yseq'][0, -1] == self.eos_id:
-                    ended_hyps.append(hyp)
-                else:
-                    remained_hyps.append(hyp)
+    def step_forward_cache(self, ys, enc_attentioned, dec_cache, t):
+        # -- Forward
+        dec_output = self.tgt_word_emb(ys) + self.positional_encoding(ys)
+        new_cache = []
 
-            hyps = remained_hyps
-            if len(hyps) > 0:
-                print('remeined hypothes: ' + str(len(hyps)))
-            else:
-                print('no hypothesis. Finish decoding.')
-                break
+        for i, dec_layer in enumerate(self.layer_stack):
+            dec_output = dec_layer.forward_cache(dec_output)
+            dec_output = torch.cat([dec_cache[:, :, i, :], dec_output], axis=1)
+            new_cache.append(dec_output.unsqueeze(2))
 
-            for hyp in hyps:
-                print('hypo: ' + ''.join([char_list[int(x)]
-                                          for x in hyp['yseq'][0, 1:]]))
-        # end for i in range(maxlen)
-        nbest_hyps = sorted(ended_hyps, key=lambda x: x['score'], reverse=True)[
-            :min(len(ended_hyps), nbest)]
-        # compitable with LAS implementation
-        for hyp in nbest_hyps:
-            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+        new_cache = torch.cat(new_cache, axis=2)  # [batch_size, n_step, num_blocks, num_hidden]
+        seq_logit = self.tgt_word_prj(dec_output[:, -1])
+        local_scores = F.log_softmax(seq_logit, dim=1)
 
-        return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
-
-    def beam_search(self, encoder_outputs, encoder_output_lengths, nbest_keep, maxlen):
-        device = encoder_outputs.device
-        B = encoder_outputs.shape[0]
-        # init
-        init_target_ids = torch.ones(B, 1).to(device).long() * self.sos_id
-        outputs = self.step_forward(init_target_ids, encoder_outputs)[:, -1, :]
-        vocab_size = outputs.size(-1)
-        outputs = outputs.view(B, vocab_size)
-        log_probs = F.log_softmax(outputs, dim=-1)
-        topk_res = torch.topk(log_probs, k=nbest_keep, dim=-1)
-        nbest_ids = topk_res[1].view(-1)  #[batch_size*nbest_keep, 1]
-        nbest_logprobs = topk_res[0].view(-1)
-
-        targets = torch.ones(B*nbest_keep, 1).to(device).long() * self.sos_id
-        target_lengths = torch.ones(B*nbest_keep).to(device).long()
-
-        targets = torch.cat([targets, nbest_ids.view(B*nbest_keep, 1)], dim=-1)
-        target_lengths += 1
-
-        finished_sel = None
-        ended = []
-        ended_scores = []
-        ended_batch_idx = []
-        for step in range(1, maxlen):
-            (nbest_ids, nbest_logprobs, beam_from) = self._decode_single_step(
-                    encoder_outputs, encoder_output_lengths, targets, target_lengths, nbest_logprobs, finished_sel)
-            batch_idx = (torch.arange(B)*nbest_keep).view(B, -1).repeat(1, nbest_keep).contiguous().to(beam_from.device)
-            batch_beam_from = (batch_idx + beam_from.view(-1, nbest_keep)).view(-1)
-            nbest_logprobs = nbest_logprobs.view(-1)
-            finished_sel = (nbest_ids.view(-1) == self.eosid)
-            targets = targets[batch_beam_from]
-            targets = torch.cat([targets, nbest_ids.view(B*nbest_keep, 1)], dim=-1)
-            target_lengths += 1
-
-            for i in range(finished_sel.shape[0]):
-                if finished_sel[i]:
-                    ended.append(targets[i])
-                    ended_scores.append(nbest_logprobs[i])
-                    ended_batch_idx.append(i // nbest_keep)
-            targets = targets * (1 - finished_sel[:, None].long()) # mask out finished
-
-        for i in range(targets.shape[0]):
-            ended.append(targets[i])
-            ended_scores.append(nbest_logprobs[i])
-            ended_batch_idx.append(i // nbest_keep)
-
-        formated = {}
-        for i in range(B):
-            formated[i] = []
-        for i in range(len(ended)):
-            if ended[i][0] == self.eosid:
-                formated[ended_batch_idx[i]].append((ended[i], ended_scores[i]))
-        for i in range(B):
-            formated[i] = sorted(formated[i], key=lambda x:x[1], reverse=True)[:nbest_keep]
-
-        targets = torch.zeros(B, nbest_keep, maxlen+1).to(encoder_outputs.device).long()
-        scores = torch.zeros(B, nbest_keep).to(encoder_outputs.device)
-        for i in range(B):
-            for j in range(nbest_keep):
-                item = formated[i][j]
-                l = min(item[0].shape[0], targets[i, j].shape[0])
-                targets[i, j, :l] = item[0][:l]
-                scores[i, j] = item[1]
-
-        return targets, scores
-
-    def _decode_single_step(self, encoder_outputs, encoder_output_lengths, prefixs, prefix_lengths, accumu_scores, finished_sel=None):
-        """
-        encoder_outputs: [B, T_e, D_e]
-        encoder_output_lengths: [B]
-        targets: [B*nbest_keep, T_d]
-        target_lengths: [B*nbest_keep]
-        accumu_scores: [B*nbest_keep]
-        """
-
-        B, T_e, D_e = encoder_outputs.shape
-        B_d, T_d = prefixs.shape
-        if B_d % B != 0:
-            raise ValueError("The dim of targets does not match the encoder_outputs.")
-        nbest_keep = B_d // B
-        encoder_outputs = (encoder_outputs.view(B, 1, T_e, D_e)
-                .repeat(1, nbest_keep, 1, 1).view(B*nbest_keep, T_e, D_e))
-        encoder_output_lengths = (encoder_output_lengths.view(B, 1)
-                .repeat(1, nbest_keep).view(-1))
-
-        # outputs: [B, nbest_keep, vocab_size]
-        outputs = (self(encoder_outputs, encoder_output_lengths, prefixs, prefix_lengths)[:, -1, :])
-        vocab_size = outputs.size(-1)
-        outputs = outputs.view(B, nbest_keep, vocab_size)
-        log_probs = F.log_softmax(outputs, dim=-1)  # [B, nbest_keep, vocab_size]
-        if finished_sel is not None:
-            log_probs = log_probs.view(B*nbest_keep, -1) - finished_sel.view(B*nbest_keep, -1).float()*9e9
-            log_probs = log_probs.view(B, nbest_keep, vocab_size)
-        this_accumu_scores = accumu_scores.view(B, nbest_keep, 1) + log_probs
-        topk_res = torch.topk(this_accumu_scores.view(B, nbest_keep*vocab_size), k=nbest_keep, dim=-1)
-
-        nbest_logprobs = topk_res[0]  # [B, nbest_keep]
-        nbest_ids = topk_res[1] % vocab_size # [B, nbest_keep]
-        beam_from = (topk_res[1] / vocab_size).long()
-
-        return nbest_ids, nbest_logprobs, beam_from
+        return local_scores, new_cache
 
 
 class Decoder_CIF(Decoder):

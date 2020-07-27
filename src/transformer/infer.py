@@ -7,6 +7,7 @@ import time
 
 from utils.utils import load_vocab, ids2str
 from utils.data import build_LFR_features
+from utils.data import AudioDataLoader, AudioDataset
 
 
 parser = argparse.ArgumentParser(
@@ -22,11 +23,15 @@ parser.add_argument('--vocab', type=str, required=True,
                     help='Dictionary which should include <unk> <sos> <eos>')
 parser.add_argument('--output', type=str, required=True,
                     help='Filename of result label data (json)')
+parser.add_argument('--label_type', type=str, default='token',
+                    help='label_type')
+parser.add_argument('--num-workers', default=4, type=int,
+                    help='Number of workers to generate minibatch')
 
 # Low Frame Rate (stacking and skipping frames)
-parser.add_argument('--LFR_m', default=4, type=int,
+parser.add_argument('--LFR_m', default=1, type=int,
                     help='Low Frame Rate: number of frames to stack')
-parser.add_argument('--LFR_n', default=3, type=int,
+parser.add_argument('--LFR_n', default=1, type=int,
                     help='Low Frame Rate: number of frames to skip')
 parser.add_argument('--spec_aug_cfg', default=None, type=str,
                     help='spec_aug_cfg')
@@ -100,24 +105,45 @@ def test(args):
 
     cur_time = time.time()
     # decode each utterance
+
+    test_dataset = AudioDataset(args.recog_json, 0, 1600, 99, batch_frames=3000)
+
+    test_loader = AudioDataLoader(test_dataset, batch_size=1,
+                                token2idx=token2idx,
+                                label_type=args.label_type,
+                                num_workers=args.num_workers,
+                                LFR_m=args.LFR_m, LFR_n=args.LFR_n)
+
     with torch.no_grad(), open(args.output, 'w') as f:
-        for idx, uttid in enumerate(js.keys(), 1):
-            input = kaldi_io.read_mat(js[uttid]['input'][0]['feat'])  # TxD
-            input = build_LFR_features(input, args.LFR_m, args.LFR_n)
-            input = torch.from_numpy(input).float()
-            input_length = torch.tensor([input.size(0)], dtype=torch.int)
-            input = input.cuda()
-            input_length = input_length.cuda()
-            # hyps_ints = model.recognize(input, input_length, idx2token, args,
-            #                             target_num=len(js[uttid]['output']['tokenid'].split()))
-            hyps_ints = model.recognize(input, input_length, idx2token, args)
-            # hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
+        for data in test_loader:
+            padded_input, input_lengths, targets = data
+            padded_input = padded_input.cuda()
+            input_lengths = input_lengths.cuda()
+            hyps_ints = model.batch_recognize(padded_input, input_lengths, args.beam_size)
             hyp = ids2str(hyps_ints, idx2token)[0]
-            f.write(uttid + ' ' + hyp + '\n')
+            # f.write(uttid + ' ' + hyp + '\n')
             used_time = time.time() - cur_time
-            print('({}/{}) use time {:.2f}s {}: {}'.format(
-                idx, len(js.keys()), used_time, uttid, hyp), flush=True)
+            print('({}) use time {:.2f}s {}'.format(
+                targets.size(0), used_time, hyp), flush=True)
             cur_time = time.time()
+    # with torch.no_grad(), open(args.output, 'w') as f:
+    #     for idx, uttid in enumerate(js.keys(), 1):
+    #         input = kaldi_io.read_mat(js[uttid]['input'][0]['feat'])  # TxD
+    #         input = build_LFR_features(input, args.LFR_m, args.LFR_n)
+    #         input = torch.from_numpy(input).float()
+    #         input_length = torch.tensor([input.size(0)], dtype=torch.int)
+    #         input = input.cuda()
+    #         input_length = input_length.cuda()
+    #         # hyps_ints = model.recognize(input, input_length, idx2token, args,
+    #         #                             target_num=len(js[uttid]['output']['tokenid'].split()))
+    #         hyps_ints = model.recognize(input, input_length, idx2token, args)
+    #         # hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
+    #         hyp = ids2str(hyps_ints, idx2token)[0]
+    #         f.write(uttid + ' ' + hyp + '\n')
+    #         used_time = time.time() - cur_time
+    #         print('({}/{}) use time {:.2f}s {}: {}'.format(
+    #             idx, len(js.keys()), used_time, uttid, hyp), flush=True)
+    #         cur_time = time.time()
 
 
 def infer(args):

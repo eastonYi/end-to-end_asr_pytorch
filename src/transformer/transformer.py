@@ -161,9 +161,26 @@ class Conv_CTC_Transformer(CTC_Transformer):
         Returns:
             nbest_hyps:
         """
-        conv_outputs, len_sequence = self.conv_encoder(feature.unsqueeze(0), len_feature)
+        # conv_outputs, len_sequence = self.conv_encoder(feature.unsqueeze(0), len_feature)
+        conv_outputs, len_sequence = self.conv_encoder(feature, len_feature)
         encoder_outputs = self.encoder(conv_outputs, len_sequence)
-        nbest_hyps = self.decoder.recognize_beam(encoder_outputs[0], char_list, args)
+        nbest_hyps = self.decoder.recognize(encoder_outputs[0], char_list, args)
+        # hyp_ids, scores = self.decoder.beam_search(encoder_outputs, len_sequence, 5, 100)
+
+        return nbest_hyps
+
+    def batch_recognize(self, features, len_features, beam_size):
+        """Sequence-to-Sequence beam search, decode one utterence now.
+        Args:
+            input: T x D
+            char_list: list of characters
+            args: args.beam
+        Returns:
+            nbest_hyps:
+        """
+        conv_outputs, len_sequences = self.conv_encoder(features, len_features)
+        encoder_outputs = self.encoder(conv_outputs, len_sequences)
+        nbest_hyps = self.decoder.batch_beam_decode(encoder_outputs, len_sequences, beam_size)
 
         return nbest_hyps
 
