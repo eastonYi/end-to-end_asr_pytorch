@@ -167,6 +167,7 @@ class Conv_CTC_Transformer(CTC_Transformer):
 
         return nbest_hyps
 
+
     @classmethod
     def create_model(cls, args):
         from transformer.decoder import Decoder

@@ -86,7 +86,7 @@ class Conv2dSubsample(nn.Module):
         self.d_input = d_input
         self.pad = pad
 
-        layers = [("subsample/conv0", nn.Conv2d(1, 32, 3, (2, 2))),
+        layers = [("subsample/conv0", nn.Conv2d(1, 32, 3, (2, 1))),
                   ("subsample/relu0", nn.ReLU())]
         for i in range(n_layers-1):
             layers += [

@@ -200,6 +200,108 @@ class Decoder(nn.Module):
 
         return [hyp['yseq'] for hyp in nbest_hyps], [len(hyp['yseq']) for hyp in nbest_hyps]
 
+    def beam_search(self, encoder_outputs, encoder_output_lengths, nbest_keep, maxlen):
+        device = encoder_outputs.device
+        B = encoder_outputs.shape[0]
+        # init
+        init_target_ids = torch.ones(B, 1).to(device).long() * self.sos_id
+        outputs = self.step_forward(init_target_ids, encoder_outputs)[:, -1, :]
+        vocab_size = outputs.size(-1)
+        outputs = outputs.view(B, vocab_size)
+        log_probs = F.log_softmax(outputs, dim=-1)
+        topk_res = torch.topk(log_probs, k=nbest_keep, dim=-1)
+        nbest_ids = topk_res[1].view(-1)  #[batch_size*nbest_keep, 1]
+        nbest_logprobs = topk_res[0].view(-1)
+
+        targets = torch.ones(B*nbest_keep, 1).to(device).long() * self.sos_id
+        target_lengths = torch.ones(B*nbest_keep).to(device).long()
+
+        targets = torch.cat([targets, nbest_ids.view(B*nbest_keep, 1)], dim=-1)
+        target_lengths += 1
+
+        finished_sel = None
+        ended = []
+        ended_scores = []
+        ended_batch_idx = []
+        for step in range(1, maxlen):
+            (nbest_ids, nbest_logprobs, beam_from) = self._decode_single_step(
+                    encoder_outputs, encoder_output_lengths, targets, target_lengths, nbest_logprobs, finished_sel)
+            batch_idx = (torch.arange(B)*nbest_keep).view(B, -1).repeat(1, nbest_keep).contiguous().to(beam_from.device)
+            batch_beam_from = (batch_idx + beam_from.view(-1, nbest_keep)).view(-1)
+            nbest_logprobs = nbest_logprobs.view(-1)
+            finished_sel = (nbest_ids.view(-1) == self.eosid)
+            targets = targets[batch_beam_from]
+            targets = torch.cat([targets, nbest_ids.view(B*nbest_keep, 1)], dim=-1)
+            target_lengths += 1
+
+            for i in range(finished_sel.shape[0]):
+                if finished_sel[i]:
+                    ended.append(targets[i])
+                    ended_scores.append(nbest_logprobs[i])
+                    ended_batch_idx.append(i // nbest_keep)
+            targets = targets * (1 - finished_sel[:, None].long()) # mask out finished
+
+        for i in range(targets.shape[0]):
+            ended.append(targets[i])
+            ended_scores.append(nbest_logprobs[i])
+            ended_batch_idx.append(i // nbest_keep)
+
+        formated = {}
+        for i in range(B):
+            formated[i] = []
+        for i in range(len(ended)):
+            if ended[i][0] == self.eosid:
+                formated[ended_batch_idx[i]].append((ended[i], ended_scores[i]))
+        for i in range(B):
+            formated[i] = sorted(formated[i], key=lambda x:x[1], reverse=True)[:nbest_keep]
+
+        targets = torch.zeros(B, nbest_keep, maxlen+1).to(encoder_outputs.device).long()
+        scores = torch.zeros(B, nbest_keep).to(encoder_outputs.device)
+        for i in range(B):
+            for j in range(nbest_keep):
+                item = formated[i][j]
+                l = min(item[0].shape[0], targets[i, j].shape[0])
+                targets[i, j, :l] = item[0][:l]
+                scores[i, j] = item[1]
+
+        return targets, scores
+
+    def _decode_single_step(self, encoder_outputs, encoder_output_lengths, prefixs, prefix_lengths, accumu_scores, finished_sel=None):
+        """
+        encoder_outputs: [B, T_e, D_e]
+        encoder_output_lengths: [B]
+        targets: [B*nbest_keep, T_d]
+        target_lengths: [B*nbest_keep]
+        accumu_scores: [B*nbest_keep]
+        """
+
+        B, T_e, D_e = encoder_outputs.shape
+        B_d, T_d = prefixs.shape
+        if B_d % B != 0:
+            raise ValueError("The dim of targets does not match the encoder_outputs.")
+        nbest_keep = B_d // B
+        encoder_outputs = (encoder_outputs.view(B, 1, T_e, D_e)
+                .repeat(1, nbest_keep, 1, 1).view(B*nbest_keep, T_e, D_e))
+        encoder_output_lengths = (encoder_output_lengths.view(B, 1)
+                .repeat(1, nbest_keep).view(-1))
+
+        # outputs: [B, nbest_keep, vocab_size]
+        outputs = (self(encoder_outputs, encoder_output_lengths, prefixs, prefix_lengths)[:, -1, :])
+        vocab_size = outputs.size(-1)
+        outputs = outputs.view(B, nbest_keep, vocab_size)
+        log_probs = F.log_softmax(outputs, dim=-1)  # [B, nbest_keep, vocab_size]
+        if finished_sel is not None:
+            log_probs = log_probs.view(B*nbest_keep, -1) - finished_sel.view(B*nbest_keep, -1).float()*9e9
+            log_probs = log_probs.view(B, nbest_keep, vocab_size)
+        this_accumu_scores = accumu_scores.view(B, nbest_keep, 1) + log_probs
+        topk_res = torch.topk(this_accumu_scores.view(B, nbest_keep*vocab_size), k=nbest_keep, dim=-1)
+
+        nbest_logprobs = topk_res[0]  # [B, nbest_keep]
+        nbest_ids = topk_res[1] % vocab_size # [B, nbest_keep]
+        beam_from = (topk_res[1] / vocab_size).long()
+
+        return nbest_ids, nbest_logprobs, beam_from
+
 
 class Decoder_CIF(Decoder):
     """Encoder of Transformer including self-attention and feed forward.
