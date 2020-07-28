@@ -180,7 +180,7 @@ class Conv_CTC_Transformer(CTC_Transformer):
         """
         conv_outputs, len_sequences = self.conv_encoder(features, len_features)
         encoder_outputs = self.encoder(conv_outputs, len_sequences)
-        nbest_hyps = self.decoder.batch_beam_decode(encoder_outputs, len_sequences, beam_size)
+        nbest_hyps = self.decoder.batch_decode(encoder_outputs, len_sequences, beam_size)
 
         return nbest_hyps
 

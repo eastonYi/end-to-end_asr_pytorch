@@ -95,80 +95,29 @@ class Decoder(nn.Module):
 
         return logits, targets_eos
 
-    def step_forward(self, ys, encoder_outputs):
-        # -- Prepare masks
-        non_pad_mask = torch.ones_like(ys).float().unsqueeze(-1) # 1xix1
-        slf_attn_mask = get_subsequent_mask(ys)
+    def step(self, prefixs, encoded, len_encoded):
 
-        # -- Forward
-        dec_output = self.tgt_word_emb(ys) + self.positional_encoding(ys)
+        non_pad_mask = torch.ones_like(prefixs).float().unsqueeze(-1) # Nxix1
+        slf_attn_mask = get_subsequent_mask(prefixs)
+
+        output_length = prefixs.size(1)
+        dec_enc_attn_mask = get_attn_pad_mask(len_encoded, output_length)
+
+        # Forward
+        dec_output = self.tgt_word_emb(prefixs) + self.positional_encoding(prefixs)
 
         for dec_layer in self.layer_stack:
             dec_output = dec_layer(
-                dec_output, encoder_outputs,
+                dec_output, encoded,
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask,
-                dec_enc_attn_mask=None)
+                dec_enc_attn_mask=dec_enc_attn_mask)
 
-        seq_logit = self.tgt_word_prj(dec_output[:, -1])
+        # before softmax
+        logits = self.tgt_word_prj(dec_output[:, -1, :])
+        scores = F.log_softmax(logits, -1) # [batch*beam, size_output]
 
-        local_scores = F.log_softmax(seq_logit, dim=1)
-
-        return local_scores
-
-    def batch_beam_decode(self, encoded, len_encoded, beam_size=1):
-        batch_size = len_encoded.size(0)
-        device = encoded.device
-        # beam search Initialize
-        # repeat each sample in batch along the batch axis [1,2,3,4] -> [1,1,2,2,3,3,4,4]
-        encoded = encoded[:, None, :, :].repeat(1, beam_size, 1, 1) # [batch_size, beam_size, *, hidden_units]
-        encoded = encoded.view(batch_size * beam_size, -1, encoded.size(-1))
-        len_encoded = len_encoded[:, None].repeat(1, beam_size).view(-1) # [batch_size * beam_size]
-
-        # [[<S>, <S>, ..., <S>]], shape: [batch_size * beam_size, 1]
-        preds = torch.ones([batch_size * beam_size, 1]).long().to(device) * self.sos_id
-        # logits = torch.zeros([batch_size * beam_size, 0, self.d_output]).float().to(device)
-        len_decoded = torch.ones_like(len_encoded)
-        # the score must be [0, -inf, -inf, ...] at init, for the preds in beam is same in init!!!
-        scores = torch.tensor([0.0] + [-inf] * (beam_size - 1)).float().repeat(batch_size).to(device)  # [batch_size * beam_size]
-        finished = torch.zeros_like(scores).bool()
-
-        # collect the initial states of lstms used in decoder.
-        base_indices = torch.arange(batch_size)[:, None].repeat(1, beam_size).view(-1)
-
-        while finished.int().sum() != finished.size(0):
-            # i, preds, scores, logits, len_decoded, finished
-            preds_emb = self.embedding(preds)
-            decoder_input = preds_emb
-
-            cur_scores = self.step_forward(decoder_input, encoded)
-
-            scores = torch.cat([scores, cur_scores[:, None]], 1)  # [batch*beam, size_output]
-
-            # rank the combined scores
-            next_scores, next_preds = torch.topk(scores, k=beam_size, sorted=True, dim=-1)
-
-            # beamed scores & Pruning
-            scores = scores[:, None] + next_scores  # [batch_size * beam_size, beam_size]
-            scores = scores.view(batch_size, beam_size * beam_size)
-
-            _, k_indices = torch.topk(scores, k=beam_size)
-            k_indices = base_indices * beam_size * beam_size + k_indices.view(-1)  # [batch_size * beam_size]
-            # Update scores.
-            scores = scores.view(-1)
-            scores = torch.gather(scores, 1, k_indices)
-            # Update predictions.
-            next_preds = next_preds.view(-1)
-            next_preds = torch.gather(next_preds, 1, k_indices)
-
-            # k_indices: [0~batch*beam*beam], preds: [0~batch*beam]
-            # preds, cache_lm, cache_decoder: these data are shared during the beam expand among vocab
-            preds = torch.gather(preds, 1, k_indices // beam_size)
-            preds = torch.cat([preds, next_preds[:, None]], axis=1)  # [batch_size * beam_size, i]
-
-            has_eos = next_preds.eq(self.end_token)
-            finished = torch.logical_or(finished, has_eos)
-            len_decoded += 1 - finished.int()
+        return scores
 
     def step_forward_cache(self, ys, enc_attentioned, dec_cache, t):
         # -- Forward
@@ -185,6 +134,194 @@ class Decoder(nn.Module):
         local_scores = F.log_softmax(seq_logit, dim=1)
 
         return local_scores, new_cache
+
+    def batch_decode(self, encoded, len_encoded, max_decode_len=100):
+        batch_size = len_encoded.size(0)
+        device = encoded.device
+
+        # [[<S>, <S>, ..., <S>]], shape: [batch_size * beam_size, 1]
+        preds = torch.ones([batch_size, 1]).long().to(device) * self.sos_id
+        len_decoded = torch.ones_like(len_encoded)
+        # the score must be [0, -inf, -inf, ...] at init, for the preds in beam is same in init!!!
+        finished = torch.zeros_like(len_decoded).bool().to(device)
+
+        for _ in range(max_decode_len):
+            # i, preds, scores, logits, len_decoded, finished
+            cur_score = self.step(preds, encoded, len_encoded)
+            cur_preds = torch.argmax(cur_score, -1)
+            preds = torch.cat([preds, cur_preds[:, None]], axis=1)  # [batch_size * beam_size, i]
+
+            has_eos = cur_preds.eq(self.eos_id)
+            finished = torch.logical_or(finished, has_eos)
+            len_decoded += 1 - finished.int()
+
+            if finished.int().sum() == finished.size(0):
+                break
+
+        len_decoded -= 1 - finished.int() # for decoded length cut by encoded length
+        preds = preds[:, 1:]
+
+        return preds, len_decoded, torch.zeros(0)
+
+    def batch_beam_decode(self, encoded, len_encoded, beam_size=1, max_decode_len=100):
+        batch_size = len_encoded.size(0)
+        device = encoded.device
+        # beam search Initialize
+        # repeat each sample in batch along the batch axis [1,2,3,4] -> [1,1,2,2,3,3,4,4]
+        encoded = encoded[:, None, :, :].repeat(1, beam_size, 1, 1) # [batch_size, beam_size, *, hidden_units]
+        encoded = encoded.view(batch_size * beam_size, -1, encoded.size(-1))
+        len_encoded = len_encoded[:, None].repeat(1, beam_size).view(-1) # [batch_size * beam_size]
+
+        # [[<S>, <S>, ..., <S>]], shape: [batch_size * beam_size, 1]
+        preds = torch.ones([batch_size * beam_size, 1]).long().to(device) * self.sos_id
+        logits = torch.zeros([batch_size * beam_size, 0, self.d_output]).float().to(device)
+        len_decoded = torch.ones_like(len_encoded)
+        # the score must be [0, -inf, -inf, ...] at init, for the preds in beam is same in init!!!
+        scores = torch.tensor([0.0] + [-inf] * (beam_size - 1)).float().repeat(batch_size).to(device)  # [batch_size * beam_size]
+        finished = torch.zeros_like(scores).bool().to(device)
+
+        # collect the initial states of lstms used in decoder.
+        base_indices = torch.arange(batch_size)[:, None].repeat(1, beam_size).view(-1).to(device)
+
+        for _ in range(max_decode_len):
+            # i, preds, scores, logits, len_decoded, finished
+
+            cur_logits = self.step(preds, encoded, len_encoded)
+            logits = torch.cat([logits, cur_logits[:, None]], 1)  # [batch*beam, size_output]
+            z = F.log_softmax(cur_logits) # [batch*beam, size_output]
+
+            # rank the combined scores
+            next_scores, next_preds = torch.topk(z, k=beam_size, sorted=True, dim=-1)
+
+            # beamed scores & Pruning
+            scores = scores[:, None] + next_scores  # [batch_size * beam_size, beam_size]
+            scores = scores.view(batch_size, beam_size * beam_size)
+
+            _, k_indices = torch.topk(scores, k=beam_size)
+            k_indices = base_indices * beam_size * beam_size + k_indices.view(-1)  # [batch_size * beam_size]
+            # Update scores.
+            scores = scores.view(-1)[k_indices]
+            # Update predictions.
+            next_preds = next_preds.view(-1)[k_indices]
+
+            # k_indices: [0~batch*beam*beam], preds: [0~batch*beam]
+            # preds, cache_lm, cache_decoder: these data are shared during the beam expand among vocab
+            preds = preds[k_indices // beam_size]
+            preds = torch.cat([preds, next_preds[:, None]], axis=1)  # [batch_size * beam_size, i]
+
+            has_eos = next_preds.eq(self.eos_id)
+            finished = torch.logical_or(finished, has_eos)
+            len_decoded += 1 - finished.int()
+
+            if finished.int().sum() == finished.size(0):
+                break
+
+        len_decoded -= 1 - finished.int() # for decoded length cut by encoded length
+        preds = preds[:, 1:]
+        # tf.nn.top_k is used to sort `scores`
+        scores_sorted, sorted = torch.topk(scores.view(batch_size, beam_size),
+                                           k=beam_size, sorted=True)
+        sorted = base_indices * beam_size + sorted.view(-1)  # [batch_size * beam_size]
+
+        # [batch_size * beam_size, ...] -> [batch_size, beam_size, ...]
+        logits_sorted = logits[sorted].view(batch_size, beam_size, -1, self.d_output)
+        preds_sorted = preds[sorted].view(batch_size, beam_size, -1) # [batch_size, beam_size, max_length]
+        len_decoded_sorted = len_decoded[sorted].view(batch_size, beam_size)
+        scores_sorted = scores[sorted].view(batch_size, beam_size)
+
+        # import pdb; pdb.set_trace()
+        # print('here')
+        return preds_sorted, len_decoded_sorted, scores_sorted
+
+    def beam_decode(self, encoded, beam=5, nbest=1, maxlen=100):
+        """Beam search, decode one utterence now.
+        Args:
+            encoder_outputs: T x H
+            char_list: list of character
+            args: args.beam
+        Returns:
+            nbest_hyps:
+        """
+        encoded = encoded
+
+        # prepare sos
+        ys = torch.ones(1, 1).fill_(self.sos_id).type_as(encoded).long()
+
+        # yseq: 1xT
+        hyp = {'score': 0.0, 'yseq': ys}
+        hyps = [hyp]
+        ended_hyps = []
+
+        for i in range(maxlen):
+            hyps_best_kept = []
+            for hyp in hyps:
+                ys = hyp['yseq']  # 1 x i
+
+                # -- Prepare masks
+                non_pad_mask = torch.ones_like(ys).float().unsqueeze(-1) # 1xix1
+                slf_attn_mask = get_subsequent_mask(ys)
+
+                # -- Forward
+                dec_output = self.dropout(
+                    self.tgt_word_emb(ys) + self.positional_encoding(ys))
+
+                for dec_layer in self.layer_stack:
+                    dec_output, *_ = dec_layer(
+                        dec_output, encoded,
+                        non_pad_mask=non_pad_mask,
+                        slf_attn_mask=slf_attn_mask,
+                        dec_enc_attn_mask=None)
+
+                seq_logit = self.tgt_word_prj(dec_output[:, -1])
+
+                local_scores = F.log_softmax(seq_logit, dim=1)
+                # topk scores
+                local_best_scores, local_best_ids = torch.topk(
+                    local_scores, beam, dim=1)
+
+                for j in range(beam):
+                    new_hyp = {}
+                    new_hyp['score'] = hyp['score'] + local_best_scores[0, j]
+                    new_hyp['yseq'] = torch.ones(1, (1+ys.size(1))).type_as(encoded).long()
+                    new_hyp['yseq'][:, :ys.size(1)] = hyp['yseq']
+                    new_hyp['yseq'][:, ys.size(1)] = int(local_best_ids[0, j])
+                    # will be (2 x beam) hyps at most
+                    hyps_best_kept.append(new_hyp)
+
+                hyps_best_kept = sorted(hyps_best_kept,
+                                        key=lambda x: x['score'],
+                                        reverse=True)[:beam]
+            # end for hyp in hyps
+            hyps = hyps_best_kept
+
+            # add eos in the final loop to avoid that there are no ended hyps
+            if i == maxlen - 1:
+                for hyp in hyps:
+                    hyp['yseq'] = torch.cat([hyp['yseq'],
+                                             torch.ones(1, 1).fill_(self.eos_id).type_as(encoded).long()], dim=1)
+
+            # add ended hypothes to a final list, and removed them from current hypothes
+            # (this will be a probmlem, number of hyps < beam)
+            remained_hyps = []
+            for hyp in hyps:
+                if hyp['yseq'][0, -1] == self.eos_id:
+                    ended_hyps.append(hyp)
+                else:
+                    remained_hyps.append(hyp)
+
+            hyps = remained_hyps
+            if len(hyps) > 0:
+                print('remeined hypothes: ' + str(len(hyps)))
+            else:
+                print('no hypothesis. Finish decoding.')
+                break
+        # end for i in range(maxlen)
+        nbest_hyps = sorted(ended_hyps, key=lambda x: x['score'], reverse=True)[
+            :min(len(ended_hyps), nbest)]
+        # compitable with LAS implementation
+        for hyp in nbest_hyps:
+            hyp['yseq'] = hyp['yseq'][0].cpu().numpy().tolist()
+        return nbest_hyps
 
 
 class Decoder_CIF(Decoder):

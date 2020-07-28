@@ -2,15 +2,16 @@
 from collections import defaultdict
 
 
-def pad_list(xs, pad_value):
+def pad_list(xs, pad_value, max_len=None):
     # From: espnet/src/nets/e2e_asr_th.py: pad_list()
     n_batch = len(xs)
-    max_len = max(x.size(0) for x in xs)
+    lengths = torch.tensor([x.size(0) for x in xs]).long()
+    max_len = lengths.max() if not max_len else max_len
     pad = xs[0].new(n_batch, max_len, * xs[0].size()[1:]).fill_(pad_value)
     for i in range(n_batch):
         pad[i, :xs[i].size(0)] = xs[i]
 
-    return pad
+    return pad, lengths
 
 
 def process_dict(dict_path):

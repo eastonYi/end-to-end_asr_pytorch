@@ -4,10 +4,11 @@ import json
 import torch
 import kaldi_io
 import time
+from torch.utils.data import DataLoader
 
 from utils.utils import load_vocab, ids2str
 from utils.data import build_LFR_features
-from utils.data import AudioDataLoader, AudioDataset
+from transformer.data import AudioDataset, batch_generator
 
 
 parser = argparse.ArgumentParser(
@@ -106,26 +107,43 @@ def test(args):
     cur_time = time.time()
     # decode each utterance
 
-    test_dataset = AudioDataset(args.recog_json, 0, 1600, 99, batch_frames=3000)
+    test_dataset = AudioDataset('/home/easton/projects/OpenASR/egs/aishell1/data/test.json',
+                                token2idx, frames_size=1000,
+                                len_in_max=1999, len_out_max=99)
+    test_loader = DataLoader(test_dataset, batch_size=1,
+                             collate_fn=batch_generator(),
+                             num_workers=args.num_workers)
+    # test_loader = AudioDataLoader(test_dataset, batch_size=1,
+    #                             token2idx=token2idx,
+    #                             label_type=args.label_type,
+    #                             num_workers=args.num_workers,
+    #                             LFR_m=args.LFR_m, LFR_n=args.LFR_n)
 
-    test_loader = AudioDataLoader(test_dataset, batch_size=1,
-                                token2idx=token2idx,
-                                label_type=args.label_type,
-                                num_workers=args.num_workers,
-                                LFR_m=args.LFR_m, LFR_n=args.LFR_n)
+    def process_batch(hyps, scores, idx2token, fw):
+        for nbest, nscore in zip(hyps, scores):
+            for n, (hyp, score) in enumerate(zip(nbest, nscore)):
+                hyp = hyp.tolist()
+                try:
+                    eos = hyp.index(3)
+                except:
+                    eos = None
 
-    with torch.no_grad(), open(args.output, 'w') as f:
+                hyp = ''.join(idx2token[i] for i in hyp[:eos])
+                print("top{}: {} score: {:.3f}\n".format(n+1, hyp, score))
+                if n == 0:
+                    fw.write("{} {}\n".format('uttid', hyp))
+
+    with torch.no_grad(), open(args.output, 'w') as fw:
         for data in test_loader:
-            padded_input, input_lengths, targets = data
-            padded_input = padded_input.cuda()
-            input_lengths = input_lengths.cuda()
-            hyps_ints = model.batch_recognize(padded_input, input_lengths, args.beam_size)
-            hyp = ids2str(hyps_ints, idx2token)[0]
-            # f.write(uttid + ' ' + hyp + '\n')
-            used_time = time.time() - cur_time
-            print('({}) use time {:.2f}s {}'.format(
-                targets.size(0), used_time, hyp), flush=True)
-            cur_time = time.time()
+            uttids, xs_pad, len_xs, ys_pad, len_ys = data
+            xs_pad = xs_pad.cuda()
+            ys_pad = ys_pad.cuda()
+            hyps_ints, len_decoded_sorted, scores = model.batch_recognize(
+                xs_pad, len_xs, args.beam_size)
+
+            process_batch(hyps_ints.cpu().numpy(), scores.cpu().numpy(), idx2token, fw)
+            # f.write(uttids[0] + ' ' + hyp + '\n')
+
     # with torch.no_grad(), open(args.output, 'w') as f:
     #     for idx, uttid in enumerate(js.keys(), 1):
     #         input = kaldi_io.read_mat(js[uttid]['input'][0]['feat'])  # TxD
@@ -139,6 +157,7 @@ def test(args):
     #         hyps_ints = model.recognize(input, input_length, idx2token, args)
     #         # hyps_ints = model.recognize_beam_cache(input, input_length, idx2token, args)
     #         hyp = ids2str(hyps_ints, idx2token)[0]
+    #         print(hyp)
     #         f.write(uttid + ' ' + hyp + '\n')
     #         used_time = time.time() - cur_time
     #         print('({}/{}) use time {:.2f}s {}: {}'.format(

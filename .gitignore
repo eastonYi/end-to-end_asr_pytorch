@@ -1,6 +1,7 @@
 *.pyc
 
 src/utils/kaldi_io.py
+src/.*
 
 tools/kaldi-io-for-python/
 tools/kaldi
@@ -9,6 +10,9 @@ egs/*/data
 egs/*/dump
 egs/*/fbank
 egs/*/exp
+
+test
+*.ipynb
 
 # MISC
 .DS_Store
